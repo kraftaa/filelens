@@ -1,0 +1,25 @@
+{
+  "order_id": "LAB-2026-001",
+  "patient": {
+    "id": "PAT-1001",
+    "name": {
+      "given": "Jane",
+      "family": "Doe"
+    }
+  },
+  "results": [
+    {
+      "code": "718-7",
+      "display": "Hemoglobin",
+      "value": 13.2,
+      "unit": "g/dL"
+    },
+    {
+      "code": "4548-4",
+      "display": "Hematocrit",
+      "value": 39.1,
+      "unit": "%"
+    }
+  ],
+  "flags": ["fasting", "verified"]
+}

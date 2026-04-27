@@ -1,0 +1,45 @@
+<cXML>
+  <Header>
+    <QuoteRequest>
+      <QuoteRequestHeader>
+        <QuoteID>Q1234</QuoteID>
+        <QuoteName>Custom Sourced Products</QuoteName>
+        <QuoteDate>2023-02-08</QuoteDate>
+        <QuoteExpiration>2023-03-08 23:59:59</QuoteExpiration>
+        <QuoteType>standing</QuoteType>
+        <MatchReference>123456798</MatchReference>
+        <BuyerContact>
+          <Name>Joe Bloggs</Name>
+          <Email>example@example.com</Email>
+        </BuyerContact>
+        <SalesContact>
+          <Name>Bill Smith</Name>
+          <Email>example@example.com</Email>
+        </SalesContact>
+      </QuoteRequestHeader>
+    </QuoteRequest>
+  </Header>
+  <Request>
+    <QuoteOrder>
+      <QuoteOrderItem>
+        <LineNumber>1</LineNumber>
+        <ItemID>
+          <SupplierPartID>45L017</SupplierPartID>
+          <AuxiliaryPartID>12345/1</AuxiliaryPartID>
+          <Classification domain="UNSPSC">56101720</Classification>
+          <Description>Low Arc Kitchen Faucet: Dominion Faucets, Silver, Chrome Finish, 1.75 gpm Flow Rate, CEC Compliant</Description>
+        </ItemID>
+        <Quantity>3</Quantity>
+        <UnitOfMeasure>EA</UnitOfMeasure>
+        <UnitPrice>41.15</UnitPrice>
+      </QuoteOrderItem>
+    </QuoteOrder>
+  </Request>
+  <Details>
+    <TotalAmount currency="USD">1234.56</TotalAmount>
+    <Comment>Items quoted as requested by Sue</Comment>
+    <TotalDetails>
+      <Total label="Discount">1.99</Total>
+    </TotalDetails>
+  </Details>
+</cXML>

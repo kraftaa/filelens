@@ -1,0 +1,96 @@
+version: 2
+
+models:
+  - name: fct_procurement_records
+    description: "Internal incremental normalized procurement records (base for typed marts)."
+    columns:
+      - name: record_key
+        description: "Deterministic unique key for merge semantics."
+        tests:
+          - not_null
+          - unique
+      - name: ingest_ts
+        description: "Ingestion watermark used for incremental pruning."
+      - name: payload_json
+        description: "Raw parsed row payload as JSONB for downstream detailed analysis."
+
+  - name: fct_clinical_records
+    description: "Internal incremental normalized clinical records (base for typed marts)."
+    columns:
+      - name: record_key
+        description: "Deterministic unique key for merge semantics."
+        tests:
+          - not_null
+          - unique
+      - name: ingest_ts
+        description: "Ingestion watermark used for incremental pruning."
+      - name: payload_json
+        description: "Raw parsed row payload as JSONB for downstream detailed analysis."
+
+  - name: idx_filelens_records
+    description: "Registry/index table across source families for lineage and cross-format discovery."
+    columns:
+      - name: record_key
+        description: "Deterministic unique key for merge semantics."
+        tests:
+          - not_null
+          - unique
+      - name: ingest_ts
+        description: "Ingestion watermark used for incremental pruning."
+      - name: payload_json
+        description: "Raw parsed row payload as JSONB for downstream detailed analysis."
+
+  - name: fct_naaccr_cases
+    description: "Typed NAACCR case view extracted from clinical records."
+    columns:
+      - name: record_key
+        description: "Deterministic record key inherited from the base mart."
+        tests:
+          - not_null
+          - unique
+      - name: patient_id
+        description: "Canonical patient identifier."
+      - name: tumor_record_number
+        description: "Typed tumor record number when available."
+
+  - name: fct_fhir_resources
+    description: "Typed FHIR resource view with key clinical fields."
+    columns:
+      - name: record_key
+        description: "Deterministic record key inherited from the base mart."
+        tests:
+          - not_null
+          - unique
+      - name: resource_type
+        description: "FHIR resource type (for example Patient, Observation)."
+      - name: patient_reference
+        description: "Patient linkage extracted from canonical columns or payload."
+
+  - name: fct_procurement_lines
+    description: "Typed procurement line view for orders, invoices, quotes, and notices."
+    columns:
+      - name: record_key
+        description: "Deterministic record key inherited from the base mart."
+        tests:
+          - not_null
+          - unique
+      - name: order_id
+        description: "Procurement order identifier."
+      - name: line_number
+        description: "Procurement line number."
+
+  - name: fct_record_attributes
+    description: "Generic key/value attribute table across all parsed records for ad-hoc querying."
+    columns:
+      - name: record_key
+        description: "Record identifier from the registry table."
+        tests:
+          - not_null
+      - name: attribute_name
+        description: "Normalized attribute name used in parsed payloads."
+        tests:
+          - not_null
+      - name: attribute_source_id
+        description: "Original source field id when derivable (for NAACCR, naaccrId without patient_/tumor_ prefix)."
+      - name: attribute_scope
+        description: "Attribute namespace. For NAACCR: patient, tumor, or naaccr_meta."

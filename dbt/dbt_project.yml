@@ -1,0 +1,25 @@
+name: filelens_transform
+version: 1.0.0
+config-version: 2
+
+profile: filelens_pg
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+on-run-start:
+  - "{{ filelens_sync_split_raw_tables() }}"
+
+models:
+  filelens_transform:
+    staging:
+      +materialized: view
+      +schema: internal
+    marts:
+      +schema: marts

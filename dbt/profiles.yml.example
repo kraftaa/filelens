@@ -1,0 +1,12 @@
+filelens_pg:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('PGHOST') }}"
+      port: "{{ env_var('PGPORT') | int }}"
+      user: "{{ env_var('PGUSER') }}"
+      pass: "{{ env_var('PGPASSWORD') }}"
+      dbname: "{{ env_var('PGDATABASE') }}"
+      schema: analytics
+      threads: 4

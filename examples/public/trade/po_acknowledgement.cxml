@@ -1,0 +1,67 @@
+<!DOCTYPE cXML SYSTEM “http://xml.cxml.org/schemas/cXML/1.2.032/cXML.dtd”>
+<cXML payloadID=“ABCD1234efgh5678.IJKL9012mnopq” timestamp=“yyyy-mm-ddThh:mm:ssZ” xml:lang=“en-US”>
+   <Header>
+      <!-- Header information goes here if available -->
+   </Header>
+   <Request>
+      <OrderRequest>
+         <OrderRequestHeader orderRequestID=“12345678”>
+            <Extrinsic name=“ext_notice_id”>POACK-789</Extrinsic>
+            <Extrinsic name=“notice_date”>2022-11-18</Extrinsic>
+            <Extrinsic name=“po_payload_id”>93369535150910.10.57.136</Extrinsic>
+            <Extrinsic name=“po_order_id”>PO-123</Extrinsic>
+            <Extrinsic name=“po_order_date”>2022-11-01</Extrinsic>
+            <Extrinsic name=“confirmation_status”>accept</Extrinsic>
+            <ShipTo>
+               <Address addressID=“TN.04" addressName=“Test Corp. - Nashville Branch”>
+                  <Name xml:lang=“en”>John Doe</Name>
+                  <PostalAddress>
+                     <DeliverTo>John Doe</DeliverTo>
+                     <Street>123 Test St.</Street>
+                     <City>Nashville</City>
+                     <State>TN</State>
+                     <PostalCode>37011</PostalCode>
+                     <Country isoCountryCode=“US”>United States</Country>
+                  </PostalAddress>
+                  <Email>example@example.com</Email>
+                  <Phone>888-555-9876</Phone>
+               </Address>
+            </ShipTo>
+            <BillTo>
+               <Address addressID=“TN.04" addressName=“Test Corp. - Nashville Branch”>
+                  <Name xml:lang=“en”>John Doe</Name>
+                  <PostalAddress>
+                     <DeliverTo>John Doe</DeliverTo>
+                     <Street>123 Test St.</Street>
+                     <City>Nashville</City>
+                     <State>TN</State>
+                     <PostalCode>37011</PostalCode>
+                     <Country isoCountryCode=“US”>United States</Country>
+                  </PostalAddress>
+                  <Email>example@example.com</Email>
+                  <Phone>888-555-9876</Phone>
+               </Address>
+            </BillTo>
+            <Contact>
+               <Name>John Doe</Name>
+               <Email>example@example.com</Email>
+            </Contact>
+         </OrderRequestHeader>
+         <ItemOut quantity=“2" lineNumber=“101”>
+            <ItemID>
+               <SupplierPartID>45L017</SupplierPartID>
+            </ItemID>
+            <Description xml:lang=“en”>Low Arc Kitchen Faucet: Dominion Faucets, Silver, Chrome Finish, 1.75 gpm Flow Rate, CEC Compliant</Description>
+            <UnitPrice>41.15</UnitPrice>
+            <UnitOfMeasure>EA</UnitOfMeasure>
+            <Classification domain=“UNSPSC”>56101720</Classification>
+            <Comments>This product is subject to a per-item packing fee for quantities less than 50.</Comments>
+            <Shipping title=“FedEx 2Day”>0</Shipping>
+            <Discount title=“Volume discount; 5% discount on quantities of ten or more.“>0</Discount>
+            <Tax title=“Sales tax - 7% Tennessee”>0</Tax>
+            <Total>86.8</Total>
+            <ConfirmationStatus quantity=“1" type=“accept” shipmentDate=“2022-01-01" uom=“EA”/>
+         </ItemOut>
+      </OrderRequest>
+   </Request>
+</cXML>

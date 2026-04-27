@@ -1,0 +1,13 @@
+<ClinicalDocument>
+  <recordTarget>
+    <patientRole>
+      <id extension="12345"/>
+    </patientRole>
+  </recordTarget>
+  <component>
+    <observation>
+      <code displayName="Blood Pressure"/>
+      <value value="120"/>
+    </observation>
+  </component>
+</ClinicalDocument>

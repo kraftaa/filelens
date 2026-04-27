@@ -1,0 +1,85 @@
+<cXML>
+  <Header>
+    <Sender>
+      <Credential domain="ABCD1234efgh5678.IJKL9012mnopq"/>
+    </Sender>
+  </Header>
+  <Request deploymentMode="production">
+    <OrderRequest>
+      <OrderRequestHeader orderID="12345678">
+        <InvoiceRequest purpose="standard">
+          <InvoiceHeader>
+            <InvoiceDetailRequest>
+              <Comments>
+                <Comment>NET30</Comment>
+              </Comments>
+              <Extrinsic name="ext_invoice_id">INV-789</Extrinsic>
+              <Extrinsic name="invoice_date">2022-11-18</Extrinsic>
+              <Extrinsic name="po_order_id">PO-123</Extrinsic>
+              <Extrinsic name="po_payload_id">93369535150910.10.57.136</Extrinsic>
+            </InvoiceDetailRequest>
+            <ShipTo>
+              <Address addressID="TN.04" addressName="Test Corp. - Nashville Branch">
+                <DeliverTo>John Doe</DeliverTo>
+                <Street>123 Test St.</Street>
+                <City>Nashville</City>
+                <State>TN</State>
+                <PostalCode>37011</PostalCode>
+                <Country isoCountryCode="US">United States</Country>
+                <Email>example@example.com</Email>
+                <Phone>888-555-9876</Phone>
+              </Address>
+            </ShipTo>
+            <BillTo>
+              <Address addressID="TN.04" addressName="Test Corp. - Nashville Branch">
+                <DeliverTo>John Doe</DeliverTo>
+                <Street>123 Test St.</Street>
+                <City>Nashville</City>
+                <State>TN</State>
+                <PostalCode>37011</PostalCode>
+                <Country isoCountryCode="US">United States</Country>
+                <Email>example@example.com</Email>
+                <Phone>888-555-9876</Phone>
+              </Address>
+            </BillTo>
+          </InvoiceHeader>
+          <InvoiceDetailItem lineNumber="101">
+            <Extrinsic name="description">Low Arc Kitchen Faucet: Dominion Faucets, Silver, Chrome Finish, 1.75 gpm Flow Rate, CEC Compliant</Extrinsic>
+            <Quantity>2</Quantity>
+            <UnitPrice>41.15</UnitPrice>
+            <UnitOfMeasure>EA</UnitOfMeasure>
+            <LineTotal>86.8</LineTotal>
+            <Comments>
+              <Comment>This product is subject to a per-item packing fee for quantities less than 50.</Comment>
+            </Comments>
+            <Shipping>
+              <Amount>0</Amount>
+              <Title>FedEx 2Day</Title>
+            </Shipping>
+          </InvoiceDetailItem>
+          <InvoiceDetailSummary>
+            <Subtotal>86.8</Subtotal>
+            <Shipping>
+              <Amount>10.09</Amount>
+              <Title>FedEx 2Day</Title>
+            </Shipping>
+            <Tax>
+              <Amount>8.64</Amount>
+              <Title>Sales tax - 7% Tennessee</Title>
+            </Tax>
+            <Handling>
+              <Amount>9.99</Amount>
+              <Title>Per-pallet fee</Title>
+            </Handling>
+            <Discount>
+              <Amount>11.55</Amount>
+              <Title>B2B discount; 10% discount for Test Corp.</Title>
+            </Discount>
+            <Total>103.97</Total>
+            <Currency>USD</Currency>
+          </InvoiceDetailSummary>
+        </InvoiceRequest>
+      </OrderRequestHeader>
+    </OrderRequest>
+  </Request>
+</cXML>

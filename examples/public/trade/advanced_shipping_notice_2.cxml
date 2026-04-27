@@ -1,0 +1,79 @@
+<cXML>
+  <Header>
+    <Sender>
+      <Credential domain="ABCD1234efgh5678.IJKL9012mnopq"/>
+    </Sender>
+  </Header>
+  <Request deploymentMode="production">
+    <ShipNoticeRequest>
+      <ShipNoticeHeader noticeID="ASN-456">
+        <Extrinsic name="notice_date">2022-11-18</Extrinsic>
+        <Extrinsic name="po_payload_id">93369535150910.10.57.136</Extrinsic>
+        <Extrinsic name="po_order_id">PO-123</Extrinsic>
+        <Extrinsic name="po_order_date">2022-11-01</Extrinsic>
+        <Extrinsic name="shipment_date">2022-11-18T08:30:00-04:00</Extrinsic>
+        <Extrinsic name="delivery_date">2022-11-22T15:30:00-04:00</Extrinsic>
+        <Extrinsic name="shipment_type">actual</Extrinsic>
+        <Extrinsic name="requested_delivery_date">2022-12-25</Extrinsic>
+        <Extrinsic name="carrier_code">UPSC</Extrinsic>
+        <Extrinsic name="carrier_code_domain">SCAC</Extrinsic>
+        <Extrinsic name="carrier_name">United Parcel Service Ground</Extrinsic>
+        <Extrinsic name="shipment_identifier">1Z56F78A0450293517</Extrinsic>
+        <ShipTo>
+          <Address addressID="TN.04" addressName="Test Corp. - Nashville Branch">
+            <DeliverTo>John Doe</DeliverTo>
+            <Street>123 Test St.</Street>
+            <City>Nashville</City>
+            <State>TN</State>
+            <PostalCode>37011</PostalCode>
+            <Country isoCountryCode="US">United States</Country>
+            <Email>example@example.com</Email>
+            <Phone>888-555-9876</Phone>
+          </Address>
+        </ShipTo>
+        <BillTo>
+          <Address addressID="TN.04" addressName="Test Corp. - Nashville Branch">
+            <DeliverTo>John Doe</DeliverTo>
+            <Street>123 Test St.</Street>
+            <City>Nashville</City>
+            <State>TN</State>
+            <PostalCode>37011</PostalCode>
+            <Country isoCountryCode="US">United States</Country>
+            <Email>example@example.com</Email>
+            <Phone>888-555-9876</Phone>
+          </Address>
+        </BillTo>
+        <Contact>
+          <Email>example@example.com</Email>
+          <Name>John Doe</Name>
+        </Contact>
+      </ShipNoticeHeader>
+      <ShipNoticeItem lineNumber="101">
+        <Extrinsic name="description">Low Arc Kitchen Faucet: Dominion Faucets, Silver, Chrome Finish, 1.75 gpm Flow Rate, CEC Compliant</Extrinsic>
+        <Quantity>2</Quantity>
+        <UnitPrice>41.15</UnitPrice>
+        <UnitOfMeasure>EA</UnitOfMeasure>
+        <Comments>
+          <Comment>This product is subject to a per-item packing fee for quantities less than 50.</Comment>
+        </Comments>
+        <Shipping>
+          <Amount>0</Amount>
+          <Title>FedEx 2Day</Title>
+        </Shipping>
+      </ShipNoticeItem>
+      <ShipNoticeSummary>
+        <Total>103.97</Total>
+        <Subtotal>85.33</Subtotal>
+        <Currency>USD</Currency>
+        <Shipping>
+          <Amount>10.09</Amount>
+          <Title>FedEx 2Day</Title>
+        </Shipping>
+        <Tax>
+          <Amount>8.64</Amount>
+          <Title>Sales tax - 7% Tennessee</Title>
+        </Tax>
+      </ShipNoticeSummary>
+    </ShipNoticeRequest>
+  </Request>
+</cXML>

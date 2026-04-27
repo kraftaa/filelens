@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: stg_procurement_records
+    description: "Canonical staging projection over raw procurement records."
+    columns:
+      - name: source_family
+        description: "Top-level source group, fixed as procurement."
+      - name: source_kind
+        description: "Detected procurement subtype (order, invoice, ship_notice, quote, procurement_generic)."
+      - name: record_key
+        description: "Deterministic row key used for incremental merging."
+      - name: ingest_ts
+        description: "Ingestion timestamp from raw load metadata."
+      - name: payload_json
+        description: "Raw parsed row payload as JSONB (full content, excluding ingestion metadata)."
+
+  - name: stg_clinical_records
+    description: "Canonical staging projection over raw clinical records."
+    columns:
+      - name: source_family
+        description: "Top-level source group, fixed as clinical."
+      - name: source_kind
+        description: "Detected clinical subtype (naaccr, fhir, hl7, cda, rdf, clinical_generic)."
+      - name: record_key
+        description: "Deterministic row key used for incremental merging."
+      - name: ingest_ts
+        description: "Ingestion timestamp from raw load metadata."
+      - name: payload_json
+        description: "Raw parsed row payload as JSONB (full content, excluding ingestion metadata)."
+
+  - name: stg_filelens_records
+    description: "Combined canonical staging layer (procurement + clinical)."
+    columns:
+      - name: record_key
+        description: "Deterministic row key used for incremental merging."
+      - name: source_kind
+        description: "Detected source subtype."
+      - name: source_family
+        description: "Top-level source group (procurement or clinical)."
+      - name: ingest_ts
+        description: "Ingestion timestamp from raw load metadata."
+      - name: payload_json
+        description: "Raw parsed row payload as JSONB (full content, excluding ingestion metadata)."

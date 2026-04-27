@@ -1,0 +1,43 @@
+<!DOCTYPE cXML SYSTEM "http://xml.cxml.org/schemas/cXML/1.2.032/cXML.dtd">
+<cXML payloadID="ABCD1234efg567" timestamp="yyyy-mm-ddThh:mm:ssZ" xml:lang="en-US">
+   <Header>
+      <!-- Header information goes here if available -->
+   </Header>
+   <Request deploymentMode="production">
+      <PunchOutSetupRequest operation="create">
+         <BuyerCookie>zyx987WVU654tsr</BuyerCookie>
+         <Extrinsic name="returnURL">https://connect.tradecentric.com/gateway/link/api/id/ABCD1234efg567</Extrinsic>
+         <Extrinsic name="postForm">https://s1-2.ariba.com/Buyer/punchout?client=HTML.1234567890ABCDEFGHIJ0987654321kl.Node12produs-c7-buyer-s2-z1-3us2gcpint&amp;responseid=9&amp;locale=en_US</Extrinsic>
+         <Contact>
+            <Name>Jane Doe</Name>
+            <Email>example@example.com</Email>
+         </Contact>
+         <Shipping>
+            <Address name="Main Office" addressID="Main">
+               <Name xml:lang="en">Jane Doe</Name>
+               <PostalAddress>
+                  <DeliverTo>Jane Doe</DeliverTo>
+                  <Street>3445 Seminole Trail #218</Street>
+                  <City>Charlottesville</City>
+                  <State>VA</State>
+                  <PostalCode>22911</PostalCode>
+                  <Country isoCountryCode="US">United States</Country>
+               </PostalAddress>
+            </Address>
+         </Shipping>
+         <Items>
+            <Item quantity="3">
+               <ItemID>
+                  <SupplierPartID>45L017</SupplierPartID>
+                  <SupplierPartAuxiliaryID>CART12-ITEM123</SupplierPartAuxiliaryID>
+               </ItemID>
+               <ItemType>out</ItemType>
+            </Item>
+         </Items>
+      </PunchOutSetupRequest>
+   </Request>
+   <Custom>
+      <OrganisationID>123</OrganisationID>
+      <OrganisationName>Buyer Corp.</OrganisationName>
+   </Custom>
+</cXML>

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["maturin>=1.11,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "filelens"
+version = "0.1.0"
+description = "CLI to inspect and normalize messy data files into clean tables"
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = ["cli", "data", "etl", "csv", "excel", "fhir", "hl7", "xml", "parquet"]
+classifiers = [
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Environment :: Console",
+  "Operating System :: OS Independent",
+  "Topic :: Software Development :: Build Tools",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+]
+
+[tool.maturin]
+bindings = "bin"
+strip = true

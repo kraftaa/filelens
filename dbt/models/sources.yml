@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: raw_procurement
+    description: "Raw landing table for procurement-family files (cXML order/invoice/quote/ship notice)."
+    schema: raw_procurement
+    tables:
+      - name: filelens_lines
+        description: "Raw procurement landing table loaded from filelens output."
+
+  - name: raw_clinical
+    description: "Raw landing table for clinical-family files (NAACCR, FHIR JSON/RDF, HL7 v2, CDA XML, and medical tabular exports)."
+    schema: raw_clinical
+    tables:
+      - name: filelens_lines
+        description: "Raw clinical landing table loaded from filelens output."

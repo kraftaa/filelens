@@ -1,0 +1,112 @@
+<cXML>
+  <Header>
+    <From>
+      <Credential>
+        <Identity>ABCD1234efgh5678.IJKL9012mnopq</Identity>
+      </Credential>
+    </From>
+  </Header>
+  <Request>
+    <ShipNoticeRequest>
+      <ShipNoticeHeader>
+        <ShipNoticeHeaderExt>
+          <ExtRefID>ASN-456</ExtRefID>
+          <NoticeDate>2022-11-18</NoticeDate>
+          <POPayloadID>93369535150910.10.57.136</POPayloadID>
+          <PONumber>PO-123</PONumber>
+          <PODate>2022-11-01</PODate>
+          <ShipDate>2022-11-18T08:30:00-04:00</ShipDate>
+          <DeliveryDate>2022-11-22T15:30:00-04:00</DeliveryDate>
+          <ShipmentType>actual</ShipmentType>
+          <RequestedDeliveryDate>2022-12-25</RequestedDeliveryDate>
+          <Carrier>
+            <CarrierID domain="SCAC">UPSC</CarrierID>
+            <CarrierName>United Parcel Service Ground</CarrierName>
+          </Carrier>
+          <ShipmentID>1Z56F78A0450293517</ShipmentID>
+          <ShipTo>
+            <Address addressID="TN.04">
+              <Name>Test Corp. - Nashville Branch</Name>
+              <DeliverTo>John Doe</DeliverTo>
+              <Street>123 Test St.</Street>
+              <City>Nashville</City>
+              <State>TN</State>
+              <PostalCode>37011</PostalCode>
+              <Country>United States</Country>
+              <CountryCode>US</CountryCode>
+              <Email>example@example.com</Email>
+              <Phone>888-555-9876</Phone>
+            </Address>
+          </ShipTo>
+          <BillTo>
+            <Address addressID="TN.04">
+              <Name>Test Corp. - Nashville Branch</Name>
+              <DeliverTo>John Doe</DeliverTo>
+              <Street>123 Test St.</Street>
+              <City>Nashville</City>
+              <State>TN</State>
+              <PostalCode>37011</PostalCode>
+              <Country>United States</Country>
+              <CountryCode>US</CountryCode>
+              <Email>example@example.com</Email>
+              <Phone>888-555-9876</Phone>
+            </Address>
+          </BillTo>
+          <Contact>
+            <Email>example@example.com</Email>
+            <Name>John Doe</Name>
+          </Contact>
+        </ShipNoticeHeaderExt>
+        <ShipNoticeItem>
+          <ItemIn>
+            <ItemID>
+              <SupplierPartID>45L017</SupplierPartID>
+            </ItemID>
+            <Quantity>2</Quantity>
+            <UnitOfMeasure>EA</UnitOfMeasure>
+            <Description>Low Arc Kitchen Faucet: Dominion Faucets, Silver, Chrome Finish, 1.75 gpm Flow Rate, CEC Compliant</Description>
+            <UnitPrice>41.15</UnitPrice>
+            <Classification domain="UNSPSC">56101720</Classification>
+            <Comments>This product is subject to a per-item packing fee for quantities less than 50.</Comments>
+            <Discount>
+              <MoneyAmount>0</MoneyAmount>
+              <DiscountPercent>5</DiscountPercent>
+              <Description>Volume discount; 5% discount on quantities of ten or more.</Description>
+            </Discount>
+            <Shipping>
+              <MoneyAmount>0</MoneyAmount>
+              <Description>FedEx 2Day</Description>
+            </Shipping>
+            <Tax>
+              <MoneyAmount>0</MoneyAmount>
+              <RatePercent>7</RatePercent>
+              <Description>Sales tax - 7% Tennessee</Description>
+            </Tax>
+            <Total>86.8</Total>
+            <Confirmation>
+              <ConfirmationStatus>
+                <Quantity>1</Quantity>
+                <Type>accept</Type>
+                <Date>2022-01-01</Date>
+                <UnitOfMeasure>EA</UnitOfMeasure>
+              </ConfirmationStatus>
+            </Confirmation>
+          </ItemIn>
+        </ShipNoticeItem>
+        <ShipNoticeSummary>
+          <TotalAmount>103.97</TotalAmount>
+          <SubtotalAmount>85.33</SubtotalAmount>
+          <Currency>USD</Currency>
+          <Shipping>
+            <MoneyAmount>10.09</MoneyAmount>
+            <Description>FedEx 2Day</Description>
+          </Shipping>
+          <Tax>
+            <MoneyAmount>8.64</MoneyAmount>
+            <Description>Sales tax - 7% Tennessee</Description>
+          </Tax>
+        </ShipNoticeSummary>
+      </ShipNoticeHeader>
+    </ShipNoticeRequest>
+  </Request>
+</cXML>

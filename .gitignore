@@ -1,0 +1,27 @@
+/target
+/output
+/logs
+/dist
+/.venv
+.DS_Store
+**/.DS_Store
+
+/dbt/target
+/dbt/dbt_packages
+/dbt/logs
+/dbt/.user.yml
+/dbt/profiles.yml
+
+/examples/**/*.parquet
+*.parquet
+
+# Keep only clearly public samples in git.
+/examples/procurement/**
+/examples/clinical/**
+/examples/misc/**
+/9100585116.cxml
+
+# Default local scratch cXML files
+/*.cxml
+/*.xcml
+*.parquet
