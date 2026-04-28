@@ -256,50 +256,9 @@ See `examples/` for real sample inputs:
 - RDF/Turtle (`.ttl`, `.ttl.html`)
 - messy CSV/TSV/PSV/TXT
 
-## Build
-
-```bash
-cargo build --release
-```
-
-Binary path:
-
-```bash
-./target/release/filelens
-```
-
-## Release (GitHub Actions)
-
-Tag-based release:
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-What happens on tag push (`v*`):
-- builds platform wheels (Linux, macOS Intel/ARM, Windows)
-- builds source distribution on Linux
-- creates a GitHub Release and uploads `dist/*` artifacts
-
-Optional PyPI publish:
-- configure PyPI Trusted Publisher for this repo (recommended)
-- on tag push, distributions are published to PyPI via GitHub OIDC
-- or run the `Release` workflow manually with `publish_pypi=true`
-
-PyPI Trusted Publisher settings:
-1. PyPI project -> `Manage` -> `Publishing` -> `Add a new publisher` -> `GitHub`.
-2. Set:
-   - Owner: `<your-github-owner>`
-   - Repository name: `filelens`
-   - Workflow name: `release.yml`
-   - Environment name: `pypi`
-3. Save. No API token secret is required.
-
 ## Workflow
 
 What this workflow does:
-- builds the `filelens` binary
 - converts only `examples/public` files into parquet under `output/public`
 - loads only `output/public/**/*.parquet` into Postgres raw tables
 - runs dbt staging + marts with `--full-refresh` (and tests)
@@ -311,7 +270,6 @@ Why `--full-refresh` in this demo workflow:
 - for recurring production loads, omit `--full-refresh` and use incremental dbt runs
 
 ```bash
-cargo build --release
 scripts/convert_inputs.sh --input-dir examples/public --output-dir output/public
 
 export PGHOST=localhost
@@ -323,6 +281,8 @@ export DBT_PROFILES_DIR=dbt
 
 scripts/auto_load_and_run_dbt.sh --parquet-glob "$PWD/output/public/**/*.parquet" --full-refresh
 ```
+
+`scripts/convert_inputs.sh` uses `./target/release/filelens` by default. Use `--bin` to point to another binary path.
 
 `scripts/convert_inputs.sh` is non-strict by default (skips failures and continues). Add `--strict` to fail on first conversion error.
 

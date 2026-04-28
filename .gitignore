@@ -25,3 +25,6 @@
 /*.cxml
 /*.xcml
 *.parquet
+
+# Local maintainer notes (do not commit)
+/docs/release.md
