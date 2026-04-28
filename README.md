@@ -40,8 +40,7 @@ Use it:
 
 ```bash
 filelens inspect file.csv
-filelens convert file.csv --out file.parquet
-filelens convert po.cxml --parser cxml --out po.parquet
+filelens convert file-or-folder --out-dir output/
 ```
 
 ## Example
@@ -102,6 +101,14 @@ S1        | 0.45  | mg/mL
 S2        | 0.50  | mg/mL
 ```
 
+Read in pandas:
+
+```python
+import pandas as pd
+df = pd.read_parquet("sample.parquet")
+df.head()
+```
+
 ## That's it
 
 For most use cases, you only need:
@@ -109,10 +116,42 @@ For most use cases, you only need:
 ```bash
 filelens inspect file.csv
 filelens inspect file.cxml
-filelens convert file.csv --out file.parquet
+filelens convert file-or-folder --out-dir output/
 ```
 
 Everything below is optional (advanced formats, dbt integration, pipelines).
+
+## Default workflow
+
+Golden path:
+
+```bash
+filelens convert <file-or-folder> --out-dir output/
+```
+
+What it does:
+- auto-detects parser from extension/content
+- keeps cXML default mode as `mapped` (canonical columns)
+- writes parquet output files
+- appends `_source_file`, `_source_kind`, `_record_id` columns
+- writes sidecar report: `output/_filelens_report.json` (schema + warnings + status per file)
+
+If your cXML needs extra nested fields, use:
+
+```bash
+filelens convert po.cxml --parser cxml --cxml-mode both --out-dir output/
+```
+
+Folder-specific command:
+
+```bash
+filelens batch examples/public/trade --out-dir output/trade
+```
+
+`batch` prints:
+- files processed / succeeded / failed
+- total rows written
+- top warnings
 
 ## Supported inputs
 

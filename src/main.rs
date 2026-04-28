@@ -65,11 +65,28 @@ enum Commands {
     },
     /// Convert a messy file into clean parquet
     Convert {
-        /// Input file (.csv/.tsv/.psv/.txt/.xlsx/.xlsm/.xls/.cxml/.xcml/.xml/.json/.ndjson/.hl7/.msg/.ttl/.rdf/.html, plus .gz variants)
+        /// Input file or folder (.csv/.tsv/.psv/.txt/.xlsx/.xlsm/.xls/.cxml/.xcml/.xml/.json/.ndjson/.hl7/.msg/.ttl/.rdf/.html, plus .gz variants)
         input: PathBuf,
-        /// Output parquet path
+        /// Output parquet path (single-file mode)
         #[arg(long)]
-        out: PathBuf,
+        out: Option<PathBuf>,
+        /// Output directory (file/folder mode)
+        #[arg(long)]
+        out_dir: Option<PathBuf>,
+        /// Force parser mode (auto, tabular, cxml, json, fhir, hl7, cda, rdf)
+        #[arg(long, value_enum, default_value_t = ParseMode::Auto)]
+        parser: ParseMode,
+        /// cXML extraction mode (mapped = curated fields, auto = path-based fields, both = mapped + path-based)
+        #[arg(long, value_enum, default_value_t = CxmlMode::Mapped)]
+        cxml_mode: CxmlMode,
+    },
+    /// Convert a folder of messy files into clean parquet with a summary report
+    Batch {
+        /// Input folder
+        input: PathBuf,
+        /// Output directory for parquet files + report JSON
+        #[arg(long)]
+        out_dir: PathBuf,
         /// Force parser mode (auto, tabular, cxml, json, fhir, hl7, cda, rdf)
         #[arg(long, value_enum, default_value_t = ParseMode::Auto)]
         parser: ParseMode,
@@ -146,11 +163,40 @@ struct SchemaDoc {
     columns: Vec<SchemaColumn>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 struct SchemaColumn {
     name: String,
     #[serde(rename = "type")]
     col_type: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+struct FileProcessReport {
+    input_file: String,
+    output_file: Option<String>,
+    source_kind: String,
+    rows: usize,
+    columns: usize,
+    warnings: Vec<String>,
+    schema: Vec<SchemaColumn>,
+    status: String,
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct WarningCount {
+    warning: String,
+    count: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct BatchReport {
+    files_processed: usize,
+    files_succeeded: usize,
+    files_failed: usize,
+    total_rows_written: usize,
+    top_warnings: Vec<WarningCount>,
+    files: Vec<FileProcessReport>,
 }
 
 fn main() -> Result<()> {
@@ -169,9 +215,22 @@ fn main() -> Result<()> {
         Commands::Convert {
             input,
             out,
+            out_dir,
             parser,
             cxml_mode,
-        } => run_convert(&input, &out, parser, cxml_mode),
+        } => run_convert(
+            &input,
+            out.as_deref(),
+            out_dir.as_deref(),
+            parser,
+            cxml_mode,
+        ),
+        Commands::Batch {
+            input,
+            out_dir,
+            parser,
+            cxml_mode,
+        } => run_batch(&input, &out_dir, parser, cxml_mode),
     }
 }
 
@@ -196,6 +255,27 @@ fn run_inspect(input: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<(
     println!("- possible numeric columns: {possible_numeric}");
     println!();
 
+    let warnings = collect_warnings(&profile);
+
+    println!("Warnings:");
+    if warnings.is_empty() {
+        println!("- none");
+    } else {
+        for warning in warnings {
+            println!("- {warning}");
+        }
+    }
+    if is_likely_cxml_path(input) && matches!(cxml_mode, CxmlMode::Mapped) {
+        println!();
+        println!("Hint:");
+        println!("- cxml mapped mode shows canonical columns only");
+        println!("- use --cxml-mode both for canonical + x_* extracted fields");
+    }
+
+    Ok(())
+}
+
+fn collect_warnings(profile: &Profile) -> Vec<String> {
     let mut warnings: Vec<String> = Vec::new();
     let empty_cols: Vec<String> = profile
         .columns
@@ -226,16 +306,7 @@ fn run_inspect(input: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<(
         }
     }
 
-    println!("Warnings:");
-    if warnings.is_empty() {
-        println!("- none");
-    } else {
-        for warning in warnings {
-            println!("- {warning}");
-        }
-    }
-
-    Ok(())
+    warnings
 }
 
 fn run_schema(input: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<()> {
@@ -257,11 +328,127 @@ fn run_schema(input: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<()
     Ok(())
 }
 
-fn run_convert(input: &Path, out: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<()> {
+fn run_convert(
+    input: &Path,
+    out: Option<&Path>,
+    out_dir: Option<&Path>,
+    parser: ParseMode,
+    cxml_mode: CxmlMode,
+) -> Result<()> {
+    if input.is_dir() {
+        let Some(dir) = out_dir else {
+            bail!("directory input requires --out-dir");
+        };
+        if out.is_some() {
+            bail!("cannot use --out with directory input; use --out-dir");
+        }
+        return run_batch(input, dir, parser, cxml_mode);
+    }
+
+    if !input.is_file() {
+        bail!(
+            "input path does not exist or is not a file: {}",
+            input.display()
+        );
+    }
+
+    if out.is_some() && out_dir.is_some() {
+        bail!("use either --out or --out-dir, not both");
+    }
+
+    let out_path = resolve_single_output_path(input, out, out_dir)?;
+    let report = process_one_file(input, &out_path, parser, cxml_mode)?;
+    if report.status == "error" {
+        bail!(
+            "{}",
+            report
+                .error
+                .unwrap_or_else(|| "failed to convert input file".to_string())
+        );
+    }
+    write_batch_report_file(
+        out_path.parent().unwrap_or_else(|| Path::new(".")),
+        &[report.clone()],
+    )?;
+
+    println!(
+        "Converted {} -> {} (rows: {}, columns: {})",
+        input.display(),
+        out_path.display(),
+        report.rows,
+        report.columns
+    );
+
+    Ok(())
+}
+
+fn run_batch(input: &Path, out_dir: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<()> {
+    if !input.is_dir() {
+        bail!("batch input must be a directory: {}", input.display());
+    }
+    fs::create_dir_all(out_dir)
+        .with_context(|| format!("failed to create output directory: {}", out_dir.display()))?;
+
+    let files = collect_supported_files(input)?;
+    if files.is_empty() {
+        bail!(
+            "no supported input files found under directory: {}",
+            input.display()
+        );
+    }
+
+    let mut reports = Vec::new();
+    for file in files {
+        let out_path = output_path_for_batch_file(&file, input, out_dir)?;
+        let report = process_one_file(&file, &out_path, parser, cxml_mode)?;
+        reports.push(report);
+    }
+
+    write_batch_report_file(out_dir, &reports)?;
+    print_batch_summary(&reports);
+    Ok(())
+}
+
+fn process_one_file(
+    input: &Path,
+    out: &Path,
+    parser: ParseMode,
+    cxml_mode: CxmlMode,
+) -> Result<FileProcessReport> {
+    let source_kind = detect_source_kind(input, parser);
+    match process_one_file_inner(input, out, parser, cxml_mode, &source_kind) {
+        Ok(mut report) => {
+            report.status = "ok".to_string();
+            Ok(report)
+        }
+        Err(err) => Ok(FileProcessReport {
+            input_file: input.display().to_string(),
+            output_file: Some(out.display().to_string()),
+            source_kind,
+            rows: 0,
+            columns: 0,
+            warnings: Vec::new(),
+            schema: Vec::new(),
+            status: "error".to_string(),
+            error: Some(err.to_string()),
+        }),
+    }
+}
+
+fn process_one_file_inner(
+    input: &Path,
+    out: &Path,
+    parser: ParseMode,
+    cxml_mode: CxmlMode,
+    source_kind: &str,
+) -> Result<FileProcessReport> {
     let rows = read_rows(input, parser, cxml_mode)?;
     let profile = build_profile(rows)?;
+    let source_kind = classify_source_kind_from_profile(source_kind, &profile.columns);
+    let warnings = collect_warnings(&profile);
 
     let mut output_columns = Vec::new();
+    let mut schema = Vec::new();
     for col in &profile.columns {
         if col.non_null_count == 0 {
             continue;
@@ -273,26 +460,320 @@ fn run_convert(input: &Path, out: &Path, parser: ParseMode, cxml_mode: CxmlMode)
             .collect();
         let series = build_series(&col.name, &col.inferred_type, &values)?;
         output_columns.push(series.into_column());
+        schema.push(SchemaColumn {
+            name: col.name.clone(),
+            col_type: col.inferred_type.as_schema_str().to_string(),
+        });
     }
 
     let mut df =
         DataFrame::new(output_columns).context("unable to create dataframe from parsed columns")?;
+    add_metadata_columns(&mut df, input, &source_kind)?;
+    schema.extend([
+        SchemaColumn {
+            name: "_source_file".to_string(),
+            col_type: "string".to_string(),
+        },
+        SchemaColumn {
+            name: "_source_kind".to_string(),
+            col_type: "string".to_string(),
+        },
+        SchemaColumn {
+            name: "_record_id".to_string(),
+            col_type: "string".to_string(),
+        },
+    ]);
 
+    if let Some(parent) = out.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create output directory: {}", parent.display()))?;
+    }
     let writer = File::create(out)
         .with_context(|| format!("failed to create output parquet file: {}", out.display()))?;
     ParquetWriter::new(writer)
         .finish(&mut df)
         .context("failed to write parquet file")?;
 
-    println!(
-        "Converted {} -> {} (rows: {}, columns: {})",
-        input.display(),
-        out.display(),
-        df.height(),
-        df.width()
-    );
+    Ok(FileProcessReport {
+        input_file: input.display().to_string(),
+        output_file: Some(out.display().to_string()),
+        source_kind,
+        rows: df.height(),
+        columns: df.width(),
+        warnings,
+        schema,
+        status: "ok".to_string(),
+        error: None,
+    })
+}
+
+fn resolve_single_output_path(
+    input: &Path,
+    out: Option<&Path>,
+    out_dir: Option<&Path>,
+) -> Result<PathBuf> {
+    if let Some(path) = out {
+        return Ok(path.to_path_buf());
+    }
+
+    let dir = out_dir
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("output"));
+    let name = output_filename_for_input(input)?;
+    Ok(dir.join(name))
+}
+
+fn output_filename_for_input(input: &Path) -> Result<String> {
+    let Some(name) = input.file_name().and_then(|n| n.to_str()) else {
+        bail!("unable to derive output filename from input path");
+    };
+    Ok(format!("{name}.parquet"))
+}
+
+fn output_path_for_batch_file(file: &Path, input_root: &Path, out_dir: &Path) -> Result<PathBuf> {
+    let rel = file.strip_prefix(input_root).with_context(|| {
+        format!(
+            "failed to compute relative path for {} under {}",
+            file.display(),
+            input_root.display()
+        )
+    })?;
+    let Some(file_name) = rel.file_name().and_then(|s| s.to_str()) else {
+        bail!("failed to derive filename for {}", file.display());
+    };
+
+    let mut out = out_dir.join(rel);
+    out.set_file_name(format!("{file_name}.parquet"));
+    Ok(out)
+}
+
+fn collect_supported_files(input_root: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    collect_supported_files_recursive(input_root, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+fn collect_supported_files_recursive(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in
+        fs::read_dir(dir).with_context(|| format!("failed to read directory: {}", dir.display()))?
+    {
+        let entry = entry?;
+        let path = entry.path();
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            collect_supported_files_recursive(&path, out)?;
+            continue;
+        }
+        if file_type.is_file() && is_supported_input_path(&path) {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn is_supported_input_path(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    match ext.as_str() {
+        "csv" | "tsv" | "psv" | "txt" | "xlsx" | "xlsm" | "xls" | "cxml" | "xcml" | "xml"
+        | "json" | "ndjson" | "hl7" | "msg" | "ttl" | "rdf" | "html" | "htm" => true,
+        "gz" => infer_inner_extension_from_gz_path(path)
+            .as_deref()
+            .is_some_and(is_supported_extension),
+        _ => false,
+    }
+}
+
+fn is_supported_extension(ext: &str) -> bool {
+    matches!(
+        ext,
+        "csv"
+            | "tsv"
+            | "psv"
+            | "txt"
+            | "xlsx"
+            | "xlsm"
+            | "xls"
+            | "cxml"
+            | "xcml"
+            | "xml"
+            | "json"
+            | "ndjson"
+            | "hl7"
+            | "msg"
+            | "ttl"
+            | "rdf"
+            | "html"
+            | "htm"
+    )
+}
+
+fn detect_source_kind(input: &Path, parser: ParseMode) -> String {
+    match parser {
+        ParseMode::Cxml => return "cxml".to_string(),
+        ParseMode::Json => return "json".to_string(),
+        ParseMode::Fhir => return "fhir".to_string(),
+        ParseMode::Hl7 => return "hl7".to_string(),
+        ParseMode::Cda => return "cda".to_string(),
+        ParseMode::Rdf => return "rdf".to_string(),
+        ParseMode::Tabular => return "tabular".to_string(),
+        ParseMode::Auto => {}
+    }
+
+    let ext = input
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let ext = if ext == "gz" {
+        infer_inner_extension_from_gz_path(input).unwrap_or_default()
+    } else {
+        ext
+    };
+
+    match ext.as_str() {
+        "cxml" | "xcml" => "cxml",
+        "xml" => "xml",
+        "json" | "ndjson" => "json",
+        "hl7" | "msg" => "hl7",
+        "ttl" | "rdf" | "html" | "htm" => "rdf",
+        "xlsx" | "xlsm" | "xls" | "csv" | "tsv" | "psv" | "txt" => "tabular",
+        _ => "auto",
+    }
+    .to_string()
+}
+
+fn classify_source_kind_from_profile(base_kind: &str, columns: &[ColumnStats]) -> String {
+    let names: HashSet<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+
+    if names.contains("resource_type") {
+        return "fhir".to_string();
+    }
+    if names.iter().any(|n| n.starts_with("naaccr_"))
+        || names.iter().any(|n| n.starts_with("tumor_"))
+    {
+        return "naaccr".to_string();
+    }
+    if names.contains("message_type") || names.contains("obx_set_id") {
+        return "hl7".to_string();
+    }
+    if names.contains("order_id")
+        && (names.contains("line_number")
+            || names.contains("supplier_part_id")
+            || names.contains("invoice_purpose"))
+    {
+        return "cxml".to_string();
+    }
+
+    base_kind.to_string()
+}
+
+fn add_metadata_columns(df: &mut DataFrame, input: &Path, source_kind: &str) -> Result<()> {
+    let rows = df.height();
+    let source_file = input.display().to_string();
+
+    let source_file_vals: Vec<Option<String>> =
+        (0..rows).map(|_| Some(source_file.clone())).collect();
+    let source_kind_vals: Vec<Option<String>> =
+        (0..rows).map(|_| Some(source_kind.to_string())).collect();
+    let record_ids: Vec<Option<String>> = (1..=rows).map(|i| Some(i.to_string())).collect();
+
+    df.with_column(Series::new("_source_file".into(), source_file_vals))
+        .context("failed to append _source_file column")?;
+    df.with_column(Series::new("_source_kind".into(), source_kind_vals))
+        .context("failed to append _source_kind column")?;
+    df.with_column(Series::new("_record_id".into(), record_ids))
+        .context("failed to append _record_id column")?;
 
     Ok(())
+}
+
+fn write_batch_report_file(out_dir: &Path, file_reports: &[FileProcessReport]) -> Result<()> {
+    fs::create_dir_all(out_dir)
+        .with_context(|| format!("failed to create output directory: {}", out_dir.display()))?;
+    let report_path = out_dir.join("_filelens_report.json");
+    let report = summarize_reports(file_reports);
+    let json = serde_json::to_string_pretty(&report)?;
+    fs::write(&report_path, json)
+        .with_context(|| format!("failed to write report file: {}", report_path.display()))?;
+    Ok(())
+}
+
+fn summarize_reports(file_reports: &[FileProcessReport]) -> BatchReport {
+    let files_processed = file_reports.len();
+    let files_succeeded = file_reports.iter().filter(|r| r.status == "ok").count();
+    let files_failed = files_processed.saturating_sub(files_succeeded);
+    let total_rows_written = file_reports
+        .iter()
+        .filter(|r| r.status == "ok")
+        .map(|r| r.rows)
+        .sum();
+
+    let mut warning_counts: HashMap<String, usize> = HashMap::new();
+    for report in file_reports.iter().filter(|r| r.status == "ok") {
+        for warning in &report.warnings {
+            *warning_counts.entry(warning.clone()).or_insert(0) += 1;
+        }
+    }
+    let mut top_warnings: Vec<WarningCount> = warning_counts
+        .into_iter()
+        .map(|(warning, count)| WarningCount { warning, count })
+        .collect();
+    top_warnings.sort_by(|a, b| {
+        b.count
+            .cmp(&a.count)
+            .then_with(|| a.warning.cmp(&b.warning))
+    });
+    top_warnings.truncate(10);
+
+    BatchReport {
+        files_processed,
+        files_succeeded,
+        files_failed,
+        total_rows_written,
+        top_warnings,
+        files: file_reports.to_vec(),
+    }
+}
+
+fn print_batch_summary(file_reports: &[FileProcessReport]) {
+    let report = summarize_reports(file_reports);
+    println!("Batch summary:");
+    println!("- files processed: {}", report.files_processed);
+    println!("- succeeded: {}", report.files_succeeded);
+    println!("- failed: {}", report.files_failed);
+    println!("- rows written: {}", report.total_rows_written);
+    if report.top_warnings.is_empty() {
+        println!("- top warnings: none");
+    } else {
+        println!("- top warnings:");
+        for w in report.top_warnings.iter().take(5) {
+            println!("  - {} ({})", w.warning, w.count);
+        }
+    }
+}
+
+fn is_likely_cxml_path(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if matches!(ext.as_str(), "cxml" | "xcml") {
+        return true;
+    }
+    if ext == "gz"
+        && let Some(inner) = infer_inner_extension_from_gz_path(path)
+    {
+        return matches!(inner.as_str(), "cxml" | "xcml");
+    }
+    false
 }
 
 fn read_rows(input: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<Vec<Vec<String>>> {
@@ -3690,5 +4171,53 @@ mod tests {
             .position(|h| h == "predicate")
             .expect("expected predicate");
         assert!(values[pred_idx].contains("rdf-syntax-ns#type"));
+    }
+
+    #[test]
+    fn resolve_single_output_defaults_to_output_dir() {
+        let input = Path::new("examples/public/trade/invoice_request.cxml");
+        let out = resolve_single_output_path(input, None, None).expect("path should resolve");
+        assert_eq!(
+            out.to_string_lossy(),
+            "output/invoice_request.cxml.parquet".to_string()
+        );
+    }
+
+    #[test]
+    fn supported_input_path_accepts_gz_wrapped_supported_extension() {
+        let p = Path::new("/tmp/naaccr.xml.gz");
+        assert!(is_supported_input_path(p));
+        let p2 = Path::new("/tmp/archive.bin.gz");
+        assert!(!is_supported_input_path(p2));
+    }
+
+    #[test]
+    fn classify_source_kind_prefers_profile_signals() {
+        let cols = vec![
+            ColumnStats {
+                index: 0,
+                name: "resource_type".to_string(),
+                inferred_type: ColumnType::String,
+                null_count: 0,
+                non_null_count: 1,
+                numeric_count: 0,
+                bool_count: 0,
+                date_count: 0,
+                string_count: 1,
+            },
+            ColumnStats {
+                index: 1,
+                name: "resource_id".to_string(),
+                inferred_type: ColumnType::String,
+                null_count: 0,
+                non_null_count: 1,
+                numeric_count: 0,
+                bool_count: 0,
+                date_count: 0,
+                string_count: 1,
+            },
+        ];
+        let kind = classify_source_kind_from_profile("json", &cols);
+        assert_eq!(kind, "fhir");
     }
 }
