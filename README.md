@@ -21,25 +21,9 @@ Built for real-world data engineering workflows.
 ## Quick start
 
 ```bash
+pip install filelens
 filelens inspect file.csv
 filelens convert file.csv --out file.parquet
-```
-
-## Install (pip)
-
-Build and install locally:
-
-```bash
-pip install .
-```
-
-`pip install .` builds from source and requires Rust/Cargo on your machine.
-
-Build a distributable wheel:
-
-```bash
-maturin build -b bin --release -o dist
-pip install dist/filelens-*.whl
 ```
 
 ## Example
