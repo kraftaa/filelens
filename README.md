@@ -259,8 +259,8 @@ See `examples/` for real sample inputs:
 ## Workflow
 
 What this workflow does:
-- converts only `examples/public` files into parquet under `output/public`
-- loads only `output/public/**/*.parquet` into Postgres raw tables
+- converts only `examples/public/**` into Parquet under `output/public/**`
+- loads only `output/public/**/*.parquet` into Postgres `raw.filelens_lines`
 - runs dbt staging + marts with `--full-refresh` (and tests)
 - does not include non-public example paths unless you change the command
 
