@@ -107,7 +107,7 @@ Supports common messy data formats used in analytics and healthcare.
 
 ## Design
 
-- deterministic (no AI guessing)
+- deterministic
 - no config required
 - optimized for messy real-world files
 
