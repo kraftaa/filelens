@@ -3,6 +3,7 @@
 Turn messy files into clean tables in one command.
 
 filelens is a CLI that helps you understand and clean messy data files.
+Most of the time, the hardest part is just understanding the file.
 
 Ever opened a file where:
 - headers start on row 6
@@ -15,6 +16,7 @@ filelens lets you:
 - convert to a clean table (Parquet)
 
 No config. No guessing. Deterministic output.
+Built for real-world data engineering workflows.
 
 ## Quick start
 
@@ -95,6 +97,18 @@ S1        | 0.45  | mg/mL
 S2        | 0.50  | mg/mL
 ```
 
+## That's it
+
+For most use cases, you only need:
+
+```bash
+filelens inspect file.csv
+filelens inspect file.cxml
+filelens convert file.csv --out file.parquet
+```
+
+Everything below is optional (advanced formats, dbt integration, pipelines).
+
 ## Supported inputs
 
 Supports common messy data formats used in analytics and healthcare.
@@ -118,7 +132,7 @@ Supports common messy data formats used in analytics and healthcare.
 - You need to convert XML/JSON into a table quickly
 - You want clean input for dbt or a data warehouse
 
-## Command reference
+## More examples
 
 Inspect:
 
@@ -161,6 +175,11 @@ filelens inspect data/file.ttl --parser rdf
 
 CXML extraction mode:
 
+cXML parsing supports:
+- canonical fields (`mapped`)
+- raw extracted fields (`auto`)
+- or both (`both`)
+
 ```bash
 # curated canonical fields only
 filelens schema data/order.cxml --parser cxml --cxml-mode mapped
@@ -174,7 +193,7 @@ filelens convert data/order.cxml --parser cxml --cxml-mode both --out data/order
 
 If running from source, use `./target/release/filelens` instead of `filelens`.
 
-## Works with dbt
+## Optional: use with dbt
 
 filelens outputs Parquet files that can be loaded into warehouses and modeled with dbt.
 
