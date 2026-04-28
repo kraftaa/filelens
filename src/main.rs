@@ -406,6 +406,14 @@ fn run_batch(input: &Path, out_dir: &Path, parser: ParseMode, cxml_mode: CxmlMod
 
     write_batch_report_file(out_dir, &reports)?;
     print_batch_summary(&reports);
+    if batch_has_failures(&reports) {
+        let failed = reports.iter().filter(|r| r.status == "error").count();
+        bail!(
+            "batch completed with {} failed file(s); see {}/_filelens_report.json",
+            failed,
+            out_dir.display()
+        );
+    }
     Ok(())
 }
 
@@ -582,35 +590,10 @@ fn is_supported_input_path(path: &Path) -> bool {
     match ext.as_str() {
         "csv" | "tsv" | "psv" | "txt" | "xlsx" | "xlsm" | "xls" | "cxml" | "xcml" | "xml"
         | "json" | "ndjson" | "hl7" | "msg" | "ttl" | "rdf" | "html" | "htm" => true,
-        "gz" => infer_inner_extension_from_gz_path(path)
-            .as_deref()
-            .is_some_and(is_supported_extension),
+        // Allow generic .gz so content-based auto detection can still parse valid payloads.
+        "gz" => true,
         _ => false,
     }
-}
-
-fn is_supported_extension(ext: &str) -> bool {
-    matches!(
-        ext,
-        "csv"
-            | "tsv"
-            | "psv"
-            | "txt"
-            | "xlsx"
-            | "xlsm"
-            | "xls"
-            | "cxml"
-            | "xcml"
-            | "xml"
-            | "json"
-            | "ndjson"
-            | "hl7"
-            | "msg"
-            | "ttl"
-            | "rdf"
-            | "html"
-            | "htm"
-    )
 }
 
 fn detect_source_kind(input: &Path, parser: ParseMode) -> String {
@@ -651,7 +634,12 @@ fn detect_source_kind(input: &Path, parser: ParseMode) -> String {
 fn classify_source_kind_from_profile(base_kind: &str, columns: &[ColumnStats]) -> String {
     let names: HashSet<&str> = columns.iter().map(|c| c.name.as_str()).collect();
 
-    if names.contains("resource_type") {
+    if names.contains("resource_type")
+        && (names.contains("resource_id")
+            || names.contains("subject_reference")
+            || names.contains("patient_reference")
+            || names.contains("code_code"))
+    {
         return "fhir".to_string();
     }
     if names.iter().any(|n| n.starts_with("naaccr_"))
@@ -681,7 +669,9 @@ fn add_metadata_columns(df: &mut DataFrame, input: &Path, source_kind: &str) -> 
         (0..rows).map(|_| Some(source_file.clone())).collect();
     let source_kind_vals: Vec<Option<String>> =
         (0..rows).map(|_| Some(source_kind.to_string())).collect();
-    let record_ids: Vec<Option<String>> = (1..=rows).map(|i| Some(i.to_string())).collect();
+    let record_ids: Vec<Option<String>> = (1..=rows)
+        .map(|i| Some(format!("{source_file}#{i}")))
+        .collect();
 
     df.with_column(Series::new("_source_file".into(), source_file_vals))
         .context("failed to append _source_file column")?;
@@ -691,6 +681,10 @@ fn add_metadata_columns(df: &mut DataFrame, input: &Path, source_kind: &str) -> 
         .context("failed to append _record_id column")?;
 
     Ok(())
+}
+
+fn batch_has_failures(file_reports: &[FileProcessReport]) -> bool {
+    file_reports.iter().any(|r| r.status == "error")
 }
 
 fn write_batch_report_file(out_dir: &Path, file_reports: &[FileProcessReport]) -> Result<()> {
@@ -4188,7 +4182,7 @@ mod tests {
         let p = Path::new("/tmp/naaccr.xml.gz");
         assert!(is_supported_input_path(p));
         let p2 = Path::new("/tmp/archive.bin.gz");
-        assert!(!is_supported_input_path(p2));
+        assert!(is_supported_input_path(p2));
     }
 
     #[test]
@@ -4219,5 +4213,50 @@ mod tests {
         ];
         let kind = classify_source_kind_from_profile("json", &cols);
         assert_eq!(kind, "fhir");
+    }
+
+    #[test]
+    fn classify_source_kind_does_not_overfit_resource_type_only() {
+        let cols = vec![ColumnStats {
+            index: 0,
+            name: "resource_type".to_string(),
+            inferred_type: ColumnType::String,
+            null_count: 0,
+            non_null_count: 1,
+            numeric_count: 0,
+            bool_count: 0,
+            date_count: 0,
+            string_count: 1,
+        }];
+        let kind = classify_source_kind_from_profile("json", &cols);
+        assert_eq!(kind, "json");
+    }
+
+    #[test]
+    fn batch_failure_detection_is_true_when_any_report_failed() {
+        let ok = FileProcessReport {
+            input_file: "a".to_string(),
+            output_file: Some("a.parquet".to_string()),
+            source_kind: "json".to_string(),
+            rows: 1,
+            columns: 1,
+            warnings: Vec::new(),
+            schema: Vec::new(),
+            status: "ok".to_string(),
+            error: None,
+        };
+        let err = FileProcessReport {
+            input_file: "b".to_string(),
+            output_file: Some("b.parquet".to_string()),
+            source_kind: "json".to_string(),
+            rows: 0,
+            columns: 0,
+            warnings: Vec::new(),
+            schema: Vec::new(),
+            status: "error".to_string(),
+            error: Some("failed".to_string()),
+        };
+        assert!(batch_has_failures(&[ok.clone(), err]));
+        assert!(!batch_has_failures(&[ok]));
     }
 }
