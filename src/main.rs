@@ -3390,6 +3390,102 @@ mod tests {
         );
     }
 
+    fn read_hard_cxml_fixture(name: &str) -> String {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples")
+            .join("hard")
+            .join("cxml")
+            .join(name);
+        fs::read_to_string(&path)
+            .unwrap_or_else(|_| panic!("failed to read hard cxml fixture: {}", path.display()))
+    }
+
+    fn parse_hard_cxml_fixture(name: &str, mode: CxmlMode) -> Vec<Vec<String>> {
+        let content = read_hard_cxml_fixture(name);
+        parse_cxml_content(&content, mode)
+            .unwrap_or_else(|_| panic!("failed to parse hard cxml fixture: {name}"))
+    }
+
+    #[test]
+    fn hard_cxml_fixtures_parse_without_panic() {
+        let fixtures = [
+            "01_simple_order.cxml",
+            "02_multiple_items.cxml",
+            "03_nested_extrinsics.cxml",
+            "04_missing_optional_fields.cxml",
+            "05_multiple_suppliers.cxml",
+            "06_money_currency_variants.cxml",
+            "07_duplicate_line_numbers.cxml",
+            "08_namespaces_weird.cxml",
+            "09_comments_processing_instructions.cxml",
+            "10_empty_values.cxml",
+        ];
+
+        for fixture in fixtures {
+            let rows = parse_hard_cxml_fixture(fixture, CxmlMode::Mapped);
+            assert!(
+                rows.len() >= 2,
+                "expected at least header + one row for fixture {fixture}"
+            );
+        }
+    }
+
+    #[test]
+    fn hard_cxml_fixtures_match_expected_row_counts() {
+        let expected: [(&str, usize); 10] = [
+            ("01_simple_order.cxml", 1),
+            ("02_multiple_items.cxml", 2),
+            ("03_nested_extrinsics.cxml", 2),
+            ("04_missing_optional_fields.cxml", 1),
+            ("05_multiple_suppliers.cxml", 2),
+            ("06_money_currency_variants.cxml", 2),
+            ("07_duplicate_line_numbers.cxml", 2),
+            ("08_namespaces_weird.cxml", 1),
+            ("09_comments_processing_instructions.cxml", 1),
+            ("10_empty_values.cxml", 1),
+        ];
+
+        for (fixture, rows_expected) in expected {
+            let rows = parse_hard_cxml_fixture(fixture, CxmlMode::Mapped);
+            let data_rows = rows.len().saturating_sub(1);
+            assert_eq!(
+                data_rows, rows_expected,
+                "unexpected row count for fixture {fixture}"
+            );
+        }
+    }
+
+    #[test]
+    fn hard_cxml_both_mode_includes_canonical_and_auto_fields() {
+        let rows = parse_hard_cxml_fixture("03_nested_extrinsics.cxml", CxmlMode::Both);
+        let headers = &rows[0];
+        assert!(headers.contains(&"order_id".to_string()));
+        assert!(headers.contains(&"line_number".to_string()));
+        assert!(headers.contains(&"x_itemout_distribution_accounting_attr_name".to_string()));
+        assert!(headers.contains(&"x_itemout_itemdetail_extrinsic_attr_name".to_string()));
+    }
+
+    #[test]
+    fn hard_cxml_namespaces_fixture_emits_auto_namespace_fields() {
+        let rows = parse_hard_cxml_fixture("08_namespaces_weird.cxml", CxmlMode::Both);
+        let headers = &rows[0];
+        assert!(headers.contains(&"x_itemout_attr_foo_linetag".to_string()));
+        assert!(headers.contains(&"x_itemout_foo_customblock".to_string()));
+        assert!(headers.contains(&"x_itemout_foo_customblock_attr_foo_note".to_string()));
+    }
+
+    #[test]
+    fn hard_cxml_duplicate_line_numbers_are_retained() {
+        let rows = parse_hard_cxml_fixture("07_duplicate_line_numbers.cxml", CxmlMode::Mapped);
+        let headers = &rows[0];
+        let idx = headers
+            .iter()
+            .position(|h| h == "line_number")
+            .expect("expected line_number header");
+        let line_numbers: Vec<&str> = rows[1..].iter().map(|r| r[idx].as_str()).collect();
+        assert_eq!(line_numbers, vec!["3", "3"]);
+    }
+
     #[test]
     fn infer_inner_extension_for_gz_path() {
         let p1 = Path::new("/tmp/a.xml.gz");

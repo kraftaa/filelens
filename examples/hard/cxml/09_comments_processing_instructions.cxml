@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?vendor mode="compat"?>
+<cXML payloadID="hard-09" timestamp="2026-04-28T11:20:00Z">
+  <!-- cXML sample with comments -->
+  <Request>
+    <OrderRequest>
+      <OrderRequestHeader orderID="HARD-09" orderDate="2026-04-28T11:20:00Z"/>
+      <ItemOut lineNumber="1" quantity="1">
+        <!-- line-level note -->
+        <ItemID><SupplierPartID>COMM-1</SupplierPartID></ItemID>
+        <ItemDetail>
+          <UnitPrice><Money currency="USD">42</Money></UnitPrice>
+          <Description>Comments and PI should not break parser</Description>
+          <UnitOfMeasure>EA</UnitOfMeasure>
+        </ItemDetail>
+      </ItemOut>
+    </OrderRequest>
+  </Request>
+</cXML>

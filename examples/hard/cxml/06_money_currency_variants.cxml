@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cXML payloadID="hard-06" timestamp="2026-04-28T10:50:00Z">
+  <Request>
+    <OrderRequest>
+      <OrderRequestHeader orderID="HARD-06" orderDate="2026-04-28T10:50:00Z"/>
+      <ItemOut lineNumber="1" quantity="1">
+        <ItemID><SupplierPartID>CUR-USD</SupplierPartID></ItemID>
+        <ItemDetail>
+          <UnitPrice><Money currency="USD">1,234.56</Money></UnitPrice>
+          <Description>USD format with comma</Description>
+          <UnitOfMeasure>EA</UnitOfMeasure>
+        </ItemDetail>
+      </ItemOut>
+      <ItemOut lineNumber="2" quantity="1">
+        <ItemID><SupplierPartID>CUR-EUR</SupplierPartID></ItemID>
+        <ItemDetail>
+          <UnitPrice><Money currency="EUR">987.65</Money></UnitPrice>
+          <Description>EUR value</Description>
+          <UnitOfMeasure>EA</UnitOfMeasure>
+        </ItemDetail>
+      </ItemOut>
+    </OrderRequest>
+  </Request>
+</cXML>

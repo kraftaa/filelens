@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cXML xmlns:foo="http://example.com/foo" payloadID="hard-08" timestamp="2026-04-28T11:10:00Z">
+  <Request>
+    <OrderRequest>
+      <OrderRequestHeader orderID="HARD-08" orderDate="2026-04-28T11:10:00Z" foo:trace="abc-123"/>
+      <ItemOut lineNumber="1" quantity="6" foo:lineTag="v1">
+        <foo:CustomBlock foo:note="keep">x</foo:CustomBlock>
+        <ItemID><SupplierPartID>NS-001</SupplierPartID></ItemID>
+        <ItemDetail>
+          <UnitPrice><Money currency="USD">3.14</Money></UnitPrice>
+          <Description xml:lang="en">Namespace attributes present</Description>
+          <UnitOfMeasure>EA</UnitOfMeasure>
+        </ItemDetail>
+      </ItemOut>
+    </OrderRequest>
+  </Request>
+</cXML>

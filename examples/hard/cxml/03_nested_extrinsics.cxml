@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cXML payloadID="hard-03" timestamp="2026-04-28T10:20:00Z">
+  <Request>
+    <OrderRequest>
+      <OrderRequestHeader orderID="HARD-03" orderDate="2026-04-28T10:20:00Z">
+        <Extrinsic name="BuyerRegion">NA</Extrinsic>
+      </OrderRequestHeader>
+      <ItemOut lineNumber="10" quantity="2">
+        <ItemID><SupplierPartID>SKU-EX-1</SupplierPartID></ItemID>
+        <ItemDetail>
+          <UnitPrice><Money currency="USD">15.00</Money></UnitPrice>
+          <Description>Nested extrinsic item A</Description>
+          <Extrinsic name="LineType">Quantity</Extrinsic>
+          <Extrinsic name="ProjectCode">P-900</Extrinsic>
+        </ItemDetail>
+        <Distribution>
+          <Accounting name="Primary Split">
+            <Segment type="Cost Centre" id="0001" description="COST_CTR"/>
+            <Segment type="GL account" id="7001" description="GL_ACC"/>
+          </Accounting>
+          <Charge><Money currency="USD">30.00</Money></Charge>
+        </Distribution>
+      </ItemOut>
+      <ItemOut lineNumber="11" quantity="1">
+        <ItemID><SupplierPartID>SKU-EX-2</SupplierPartID></ItemID>
+        <ItemDetail>
+          <UnitPrice><Money currency="USD">8.00</Money></UnitPrice>
+          <Description>Nested extrinsic item B</Description>
+          <Extrinsic name="LineType">Quantity</Extrinsic>
+        </ItemDetail>
+      </ItemOut>
+    </OrderRequest>
+  </Request>
+</cXML>

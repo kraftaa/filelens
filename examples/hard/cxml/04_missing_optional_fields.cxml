@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cXML payloadID="hard-04" timestamp="2026-04-28T10:30:00Z">
+  <Request>
+    <OrderRequest>
+      <OrderRequestHeader orderID="HARD-04"/>
+      <ItemOut lineNumber="1" quantity="9">
+        <ItemID></ItemID>
+        <ItemDetail>
+          <Description>Missing optional fields example</Description>
+        </ItemDetail>
+      </ItemOut>
+    </OrderRequest>
+  </Request>
+</cXML>

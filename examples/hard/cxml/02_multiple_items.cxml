@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cXML payloadID="hard-02" timestamp="2026-04-28T10:10:00Z">
+  <Request>
+    <OrderRequest>
+      <OrderRequestHeader orderID="HARD-02" orderDate="2026-04-28T10:10:00Z"/>
+      <ItemOut lineNumber="1" quantity="1">
+        <ItemID><SupplierPartID>SKU-101</SupplierPartID></ItemID>
+        <ItemDetail>
+          <UnitPrice><Money currency="USD">4.20</Money></UnitPrice>
+          <Description>Item one</Description>
+          <UnitOfMeasure>EA</UnitOfMeasure>
+        </ItemDetail>
+      </ItemOut>
+      <ItemOut lineNumber="2" quantity="5">
+        <ItemID><SupplierPartID>SKU-102</SupplierPartID></ItemID>
+        <ItemDetail>
+          <UnitPrice><Money currency="USD">9.99</Money></UnitPrice>
+          <Description>Item two</Description>
+          <UnitOfMeasure>EA</UnitOfMeasure>
+        </ItemDetail>
+      </ItemOut>
+    </OrderRequest>
+  </Request>
+</cXML>

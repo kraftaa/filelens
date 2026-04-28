@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cXML payloadID="hard-07" timestamp="2026-04-28T11:00:00Z">
+  <Request>
+    <OrderRequest>
+      <OrderRequestHeader orderID="HARD-07" orderDate="2026-04-28T11:00:00Z"/>
+      <ItemOut lineNumber="3" quantity="1">
+        <ItemID><SupplierPartID>DUP-1</SupplierPartID></ItemID>
+        <ItemDetail><UnitPrice><Money currency="USD">10</Money></UnitPrice><Description>First</Description></ItemDetail>
+      </ItemOut>
+      <ItemOut lineNumber="3" quantity="2">
+        <ItemID><SupplierPartID>DUP-2</SupplierPartID></ItemID>
+        <ItemDetail><UnitPrice><Money currency="USD">20</Money></UnitPrice><Description>Second</Description></ItemDetail>
+      </ItemOut>
+    </OrderRequest>
+  </Request>
+</cXML>

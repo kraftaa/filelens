@@ -264,6 +264,7 @@ See `examples/` for real sample inputs:
 - healthcare (`FHIR`, `HL7`, `CDA`, `NAACCR`)
 - RDF/Turtle (`.ttl`, `.ttl.html`)
 - messy CSV/TSV/PSV/TXT
+- hard cXML edge-case fixtures for parser testing: `examples/hard/cxml`
 
 ## Workflow
 

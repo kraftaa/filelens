@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cXML payloadID="hard-01" timestamp="2026-04-28T10:00:00Z">
+  <Request>
+    <OrderRequest>
+      <OrderRequestHeader orderID="HARD-01" orderDate="2026-04-28T10:00:00Z">
+        <ShipTo><Address><Name>Lab A</Name></Address></ShipTo>
+        <BillTo><Address><Name>Finance A</Name></Address></BillTo>
+      </OrderRequestHeader>
+      <ItemOut lineNumber="1" quantity="3">
+        <ItemID><SupplierPartID>SKU-001</SupplierPartID></ItemID>
+        <ItemDetail>
+          <UnitPrice><Money currency="USD">12.50</Money></UnitPrice>
+          <Description xml:lang="en">Simple item</Description>
+          <UnitOfMeasure>EA</UnitOfMeasure>
+          <Classification domain="UNSPSC">11111111</Classification>
+        </ItemDetail>
+      </ItemOut>
+    </OrderRequest>
+  </Request>
+</cXML>
