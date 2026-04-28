@@ -48,6 +48,9 @@ enum Commands {
         /// Force parser mode (auto, tabular, cxml, json, fhir, hl7, cda, rdf)
         #[arg(long, value_enum, default_value_t = ParseMode::Auto)]
         parser: ParseMode,
+        /// cXML extraction mode (mapped = curated fields, auto = path-based fields, both = mapped + path-based)
+        #[arg(long, value_enum, default_value_t = CxmlMode::Mapped)]
+        cxml_mode: CxmlMode,
     },
     /// Print inferred schema as JSON
     Schema {
@@ -56,6 +59,9 @@ enum Commands {
         /// Force parser mode (auto, tabular, cxml, json, fhir, hl7, cda, rdf)
         #[arg(long, value_enum, default_value_t = ParseMode::Auto)]
         parser: ParseMode,
+        /// cXML extraction mode (mapped = curated fields, auto = path-based fields, both = mapped + path-based)
+        #[arg(long, value_enum, default_value_t = CxmlMode::Mapped)]
+        cxml_mode: CxmlMode,
     },
     /// Convert a messy file into clean parquet
     Convert {
@@ -67,6 +73,9 @@ enum Commands {
         /// Force parser mode (auto, tabular, cxml, json, fhir, hl7, cda, rdf)
         #[arg(long, value_enum, default_value_t = ParseMode::Auto)]
         parser: ParseMode,
+        /// cXML extraction mode (mapped = curated fields, auto = path-based fields, both = mapped + path-based)
+        #[arg(long, value_enum, default_value_t = CxmlMode::Mapped)]
+        cxml_mode: CxmlMode,
     },
 }
 
@@ -80,6 +89,13 @@ enum ParseMode {
     Hl7,
     Cda,
     Rdf,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum CxmlMode {
+    Mapped,
+    Auto,
+    Both,
 }
 
 #[derive(Debug, Clone)]
@@ -140,14 +156,27 @@ struct SchemaColumn {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Inspect { input, parser } => run_inspect(&input, parser),
-        Commands::Schema { input, parser } => run_schema(&input, parser),
-        Commands::Convert { input, out, parser } => run_convert(&input, &out, parser),
+        Commands::Inspect {
+            input,
+            parser,
+            cxml_mode,
+        } => run_inspect(&input, parser, cxml_mode),
+        Commands::Schema {
+            input,
+            parser,
+            cxml_mode,
+        } => run_schema(&input, parser, cxml_mode),
+        Commands::Convert {
+            input,
+            out,
+            parser,
+            cxml_mode,
+        } => run_convert(&input, &out, parser, cxml_mode),
     }
 }
 
-fn run_inspect(input: &Path, parser: ParseMode) -> Result<()> {
-    let rows = read_rows(input, parser)?;
+fn run_inspect(input: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<()> {
+    let rows = read_rows(input, parser, cxml_mode)?;
     let profile = build_profile(rows)?;
 
     let possible_numeric = profile
@@ -209,8 +238,8 @@ fn run_inspect(input: &Path, parser: ParseMode) -> Result<()> {
     Ok(())
 }
 
-fn run_schema(input: &Path, parser: ParseMode) -> Result<()> {
-    let rows = read_rows(input, parser)?;
+fn run_schema(input: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<()> {
+    let rows = read_rows(input, parser, cxml_mode)?;
     let profile = build_profile(rows)?;
 
     let schema = SchemaDoc {
@@ -228,8 +257,8 @@ fn run_schema(input: &Path, parser: ParseMode) -> Result<()> {
     Ok(())
 }
 
-fn run_convert(input: &Path, out: &Path, parser: ParseMode) -> Result<()> {
-    let rows = read_rows(input, parser)?;
+fn run_convert(input: &Path, out: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<()> {
+    let rows = read_rows(input, parser, cxml_mode)?;
     let profile = build_profile(rows)?;
 
     let mut output_columns = Vec::new();
@@ -266,7 +295,7 @@ fn run_convert(input: &Path, out: &Path, parser: ParseMode) -> Result<()> {
     Ok(())
 }
 
-fn read_rows(input: &Path, parser: ParseMode) -> Result<Vec<Vec<String>>> {
+fn read_rows(input: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<Vec<Vec<String>>> {
     let ext = input
         .extension()
         .and_then(|x| x.to_str())
@@ -274,11 +303,11 @@ fn read_rows(input: &Path, parser: ParseMode) -> Result<Vec<Vec<String>>> {
         .to_ascii_lowercase();
 
     let rows = if ext == "gz" {
-        read_rows_from_gzip(input, parser)?
+        read_rows_from_gzip(input, parser, cxml_mode)?
     } else if matches!(parser, ParseMode::Auto) {
-        read_rows_auto_from_extension(input, &ext)?
+        read_rows_auto_from_extension(input, &ext, cxml_mode)?
     } else {
-        read_rows_with_mode_from_path(input, parser, &ext)?
+        read_rows_with_mode_from_path(input, parser, &ext, cxml_mode)?
     };
 
     finalize_rows(rows)
@@ -307,7 +336,11 @@ fn finalize_rows(mut rows: Vec<Vec<String>>) -> Result<Vec<Vec<String>>> {
     Ok(rows)
 }
 
-fn read_rows_auto_from_extension(input: &Path, ext: &str) -> Result<Vec<Vec<String>>> {
+fn read_rows_auto_from_extension(
+    input: &Path,
+    ext: &str,
+    cxml_mode: CxmlMode,
+) -> Result<Vec<Vec<String>>> {
     match ext {
         "csv" => read_delimited_rows(input, None),
         "tsv" => read_delimited_rows(input, Some(b'\t')),
@@ -316,23 +349,23 @@ fn read_rows_auto_from_extension(input: &Path, ext: &str) -> Result<Vec<Vec<Stri
         "xlsx" | "xlsm" | "xls" => read_excel_rows(input),
         "hl7" | "msg" => {
             let content = read_text_file_lossy(input, "hl7 message file")?;
-            read_rows_from_content(&content, ParseMode::Auto, Some(ext))
+            read_rows_from_content(&content, ParseMode::Auto, Some(ext), cxml_mode)
         }
         "json" | "ndjson" => {
             let content = read_text_file_lossy(input, "json file")?;
-            read_rows_from_content(&content, ParseMode::Auto, Some(ext))
+            read_rows_from_content(&content, ParseMode::Auto, Some(ext), cxml_mode)
         }
         "ttl" | "rdf" => {
             let content = read_text_file_lossy(input, "rdf turtle file")?;
-            read_rows_from_content(&content, ParseMode::Auto, Some(ext))
+            read_rows_from_content(&content, ParseMode::Auto, Some(ext), cxml_mode)
         }
         "html" | "htm" => {
             let content = read_text_file_lossy(input, "html file")?;
-            read_rows_from_content(&content, ParseMode::Auto, Some(ext))
+            read_rows_from_content(&content, ParseMode::Auto, Some(ext), cxml_mode)
         }
         "xml" | "cxml" | "xcml" => {
             let content = read_text_file_lossy(input, "xml/cxml file")?;
-            read_rows_from_content(&content, ParseMode::Auto, Some(ext))
+            read_rows_from_content(&content, ParseMode::Auto, Some(ext), cxml_mode)
         }
         _ => bail!(
             "unsupported file extension \"{}\". supported: .csv, .tsv, .psv, .txt, .xlsx, .xlsm, .xls, .cxml, .xcml, .xml, .json, .ndjson, .hl7, .msg, .ttl, .rdf, .html, and .gz variants",
@@ -345,9 +378,10 @@ fn read_rows_with_mode_from_path(
     input: &Path,
     parser: ParseMode,
     ext: &str,
+    cxml_mode: CxmlMode,
 ) -> Result<Vec<Vec<String>>> {
     match parser {
-        ParseMode::Auto => read_rows_auto_from_extension(input, ext),
+        ParseMode::Auto => read_rows_auto_from_extension(input, ext, cxml_mode),
         ParseMode::Tabular => match ext {
             "xlsx" | "xlsm" | "xls" => read_excel_rows(input),
             "tsv" => read_delimited_rows(input, Some(b'\t')),
@@ -360,7 +394,7 @@ fn read_rows_with_mode_from_path(
         },
         ParseMode::Cxml => {
             let content = read_text_file_lossy(input, "xml/cxml file")?;
-            read_cxml_content_from_text(content)
+            read_cxml_content_from_text(content, cxml_mode)
         }
         ParseMode::Json => {
             let content = read_text_file_lossy(input, "json file")?;
@@ -389,6 +423,7 @@ fn read_rows_from_content(
     content: &str,
     parser: ParseMode,
     hint_ext: Option<&str>,
+    cxml_mode: CxmlMode,
 ) -> Result<Vec<Vec<String>>> {
     match parser {
         ParseMode::Auto => {
@@ -397,7 +432,9 @@ fn read_rows_from_content(
                     "csv" | "txt" => return read_delimited_content(content, None),
                     "tsv" => return read_delimited_content(content, Some(b'\t')),
                     "psv" => return read_delimited_content(content, Some(b'|')),
-                    "cxml" | "xcml" => return read_cxml_content_from_text(content.to_string()),
+                    "cxml" | "xcml" => {
+                        return read_cxml_content_from_text(content.to_string(), cxml_mode);
+                    }
                     "hl7" | "msg" => return parse_hl7_content(content),
                     "ttl" | "rdf" => return parse_rdf_content(content),
                     "json" | "ndjson" => {
@@ -414,7 +451,7 @@ fn read_rows_from_content(
                             return parse_cda_content(content);
                         }
                         if content.contains("<cXML") || content.contains("<NaaccrData") {
-                            return read_cxml_content_from_text(content.to_string());
+                            return read_cxml_content_from_text(content.to_string(), cxml_mode);
                         }
                     }
                     _ => {}
@@ -438,7 +475,7 @@ fn read_rows_from_content(
                 if content.contains("<ClinicalDocument") {
                     return parse_cda_content(content);
                 }
-                let cxml_attempt = read_cxml_content_from_text(content.to_string());
+                let cxml_attempt = read_cxml_content_from_text(content.to_string(), cxml_mode);
                 if cxml_attempt.is_ok() {
                     return cxml_attempt;
                 }
@@ -460,7 +497,7 @@ fn read_rows_from_content(
             Some("csv") => read_delimited_content(content, Some(b',')),
             _ => read_delimited_content(content, None),
         },
-        ParseMode::Cxml => read_cxml_content_from_text(content.to_string()),
+        ParseMode::Cxml => read_cxml_content_from_text(content.to_string(), cxml_mode),
         ParseMode::Json => parse_json_content(content),
         ParseMode::Fhir => parse_fhir_content(content),
         ParseMode::Hl7 => parse_hl7_content(content),
@@ -469,7 +506,11 @@ fn read_rows_from_content(
     }
 }
 
-fn read_rows_from_gzip(input: &Path, parser: ParseMode) -> Result<Vec<Vec<String>>> {
+fn read_rows_from_gzip(
+    input: &Path,
+    parser: ParseMode,
+    cxml_mode: CxmlMode,
+) -> Result<Vec<Vec<String>>> {
     let raw_gz = fs::read(input)
         .with_context(|| format!("failed to open gzip file: {}", input.display()))?;
     if raw_gz.is_empty() {
@@ -484,7 +525,7 @@ fn read_rows_from_gzip(input: &Path, parser: ParseMode) -> Result<Vec<Vec<String
 
     let text = decode_text_bytes(decoded)?;
     let inner_ext = infer_inner_extension_from_gz_path(input);
-    read_rows_from_content(&text, parser, inner_ext.as_deref())
+    read_rows_from_content(&text, parser, inner_ext.as_deref(), cxml_mode)
 }
 
 fn infer_inner_extension_from_gz_path(path: &Path) -> Option<String> {
@@ -590,14 +631,17 @@ fn read_excel_rows(input: &Path) -> Result<Vec<Vec<String>>> {
     first_readable.context("failed to read any worksheet content")
 }
 
-fn read_cxml_content_from_text(mut content: String) -> Result<Vec<Vec<String>>> {
+fn read_cxml_content_from_text(
+    mut content: String,
+    cxml_mode: CxmlMode,
+) -> Result<Vec<Vec<String>>> {
     normalize_smart_quotes(&mut content);
 
     if content.contains("<NaaccrData") {
         return parse_naaccr_content(&content);
     }
 
-    parse_cxml_content(&content)
+    parse_cxml_content(&content, cxml_mode)
 }
 
 fn normalize_smart_quotes(content: &mut String) {
@@ -610,7 +654,9 @@ fn normalize_smart_quotes(content: &mut String) {
     }
 }
 
-fn parse_cxml_content(content: &str) -> Result<Vec<Vec<String>>> {
+fn parse_cxml_content(content: &str, cxml_mode: CxmlMode) -> Result<Vec<Vec<String>>> {
+    let include_mapped = !matches!(cxml_mode, CxmlMode::Auto);
+    let include_auto = !matches!(cxml_mode, CxmlMode::Mapped);
     let mut reader = XmlReader::from_str(content);
     reader.config_mut().trim_text(true);
 
@@ -776,6 +822,9 @@ fn parse_cxml_content(content: &str) -> Result<Vec<Vec<String>>> {
                     }
                     _ => {}
                 }
+                if include_auto && let Some(item) = current_item.as_mut() {
+                    capture_cxml_auto_attrs(item, &path, &reader, &event);
+                }
             }
             XmlEvent::Empty(event) => {
                 let name = qname_to_string(event.name());
@@ -857,6 +906,9 @@ fn parse_cxml_content(content: &str) -> Result<Vec<Vec<String>>> {
                     }
                     _ => {}
                 }
+                if include_auto && let Some(item) = current_item.as_mut() {
+                    capture_cxml_auto_attrs(item, &path, &reader, &event);
+                }
                 let _ = path.pop();
             }
             XmlEvent::Text(event) => {
@@ -864,6 +916,10 @@ fn parse_cxml_content(content: &str) -> Result<Vec<Vec<String>>> {
                 if text.is_empty() {
                     buf.clear();
                     continue;
+                }
+
+                if include_auto && let Some(item) = current_item.as_mut() {
+                    capture_cxml_auto_text(item, &path, &text);
                 }
 
                 if path_ends_with(&path, &["ShipTo", "Address", "Name"]) && ship_to_name.is_empty()
@@ -980,6 +1036,12 @@ fn parse_cxml_content(content: &str) -> Result<Vec<Vec<String>>> {
             }
             XmlEvent::CData(event) => {
                 let text = event.decode()?.trim().to_string();
+                if include_auto
+                    && let Some(item) = current_item.as_mut()
+                    && !text.is_empty()
+                {
+                    capture_cxml_auto_text(item, &path, &text);
+                }
                 if let Some(header_key) = current_header_extrinsic.clone() {
                     if !text.is_empty() {
                         header_extrinsics.insert(header_key, text.clone());
@@ -1020,6 +1082,12 @@ fn parse_cxml_content(content: &str) -> Result<Vec<Vec<String>>> {
         bail!(
             "cxml has no supported line items to parse (expected ItemOut, InvoiceDetailItem, ItemIn, ShipNoticeItem, QuoteOrderItem, or Items/Item)"
         );
+    }
+
+    if !include_mapped {
+        for row in &mut rows {
+            row.retain(|k, _| k.starts_with("x_"));
+        }
     }
 
     let mut all_headers: HashSet<String> = HashSet::new();
@@ -1089,6 +1157,88 @@ fn parse_cxml_content(content: &str) -> Result<Vec<Vec<String>>> {
     }
 
     Ok(tabular_rows)
+}
+
+fn capture_cxml_auto_attrs(
+    item: &mut HashMap<String, String>,
+    path: &[String],
+    reader: &XmlReader<&[u8]>,
+    start: &BytesStart<'_>,
+) {
+    for attr in start.attributes().with_checks(false).flatten() {
+        let Ok(value) = attr.decode_and_unescape_value(reader.decoder()) else {
+            continue;
+        };
+        let value = value.trim();
+        if value.is_empty() {
+            continue;
+        }
+        let attr_name = String::from_utf8_lossy(attr.key.as_ref());
+        let key = cxml_auto_key(path, Some(&attr_name));
+        insert_or_append(item, &key, value);
+    }
+}
+
+fn capture_cxml_auto_text(item: &mut HashMap<String, String>, path: &[String], text: &str) {
+    let value = text.trim();
+    if value.is_empty() {
+        return;
+    }
+    let key = cxml_auto_key(path, None);
+    insert_or_append(item, &key, value);
+}
+
+fn cxml_auto_key(path: &[String], attr: Option<&str>) -> String {
+    let start_idx = cxml_item_path_start(path);
+    let mut parts: Vec<String> = path[start_idx..]
+        .iter()
+        .map(|p| normalize_header(p))
+        .filter(|p| !p.is_empty())
+        .collect();
+    if let Some(attr_name) = attr {
+        let norm = normalize_header(attr_name);
+        if !norm.is_empty() {
+            parts.push("attr".to_string());
+            parts.push(norm);
+        }
+    }
+    if parts.is_empty() {
+        return "x_value".to_string();
+    }
+    format!("x_{}", parts.join("_"))
+}
+
+fn cxml_item_path_start(path: &[String]) -> usize {
+    path.iter()
+        .position(|p| {
+            matches!(
+                p.as_str(),
+                "ItemOut"
+                    | "InvoiceDetailItem"
+                    | "ItemIn"
+                    | "ShipNoticeItem"
+                    | "QuoteOrderItem"
+                    | "Item"
+            )
+        })
+        .unwrap_or(0)
+}
+
+fn insert_or_append(item: &mut HashMap<String, String>, key: &str, value: &str) {
+    match item.get_mut(key) {
+        Some(existing) => {
+            if existing == value {
+                return;
+            }
+            if !existing.is_empty() {
+                existing.push_str(" | ");
+            }
+            existing.push_str(value);
+        }
+        None => {
+            item.insert(key.to_string(), value.to_string());
+        }
+    }
 }
 
 fn qname_to_string(name: QName<'_>) -> String {
@@ -2208,7 +2358,10 @@ fn parse_rdf_content(content: &str) -> Result<Vec<Vec<String>>> {
     let mut parser = TurtleParser::new(cursor, None);
     parser.parse_all(&mut |triple| -> std::result::Result<(), anyhow::Error> {
         let mut row = HashMap::new();
-        row.insert("subject".to_string(), rio_subject_to_string(&triple.subject));
+        row.insert(
+            "subject".to_string(),
+            rio_subject_to_string(&triple.subject),
+        );
         row.insert("predicate".to_string(), triple.predicate.iri.to_string());
         let (object, object_kind) = rio_term_to_string_kind(&triple.object);
         row.insert("object".to_string(), object);
@@ -2284,10 +2437,9 @@ fn rio_term_to_string_kind(term: &RioTerm<'_>) -> (String, String) {
             RioLiteral::LanguageTaggedString { value, language } => {
                 (format!("{value}@{language}"), "literal_lang".to_string())
             }
-            RioLiteral::Typed { value, datatype } => (
-                value.to_string(),
-                format!("literal_typed:{}", datatype.iri),
-            ),
+            RioLiteral::Typed { value, datatype } => {
+                (value.to_string(), format!("literal_typed:{}", datatype.iri))
+            }
         },
         RioTerm::Triple(_) => ("_:embedded_triple".to_string(), "triple".to_string()),
     }
@@ -3107,7 +3259,7 @@ mod tests {
   </Request>
 </cXML>"#;
 
-        let rows = parse_cxml_content(xml).expect("cxml parsing should succeed");
+        let rows = parse_cxml_content(xml, CxmlMode::Mapped).expect("cxml parsing should succeed");
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0][0], "order_id");
         assert!(rows[0].contains(&"supplier_part_id".to_string()));
@@ -3131,6 +3283,61 @@ mod tests {
         assert_eq!(values[idx("ship_to_name")], "Lab Site A");
         assert_eq!(values[idx("bill_to_name")], "Billing Team");
         assert_eq!(values[idx("extrinsic_linetype")], "Quantity");
+    }
+
+    #[test]
+    fn cxml_auto_mode_captures_distribution_segments() {
+        let xml = r#"<cXML>
+  <Request>
+    <OrderRequest>
+      <OrderRequestHeader orderID="PO-100" />
+      <ItemOut lineNumber="1" quantity="1">
+        <Distribution>
+          <Accounting name="Main Account Split">
+            <Segment type="Cost Centre" id="0001" description="COST_CTR"/>
+            <Segment type="GL account" id="4000" description="GL_ACC"/>
+          </Accounting>
+          <Charge><Money currency="USD">123.45</Money></Charge>
+        </Distribution>
+      </ItemOut>
+    </OrderRequest>
+  </Request>
+</cXML>"#;
+
+        let rows =
+            parse_cxml_content(xml, CxmlMode::Auto).expect("cxml auto parsing should succeed");
+        assert_eq!(rows.len(), 2);
+
+        let headers = &rows[0];
+        let values = &rows[1];
+        let idx = |key: &str| {
+            headers
+                .iter()
+                .position(|h| h == key)
+                .expect("expected header key")
+        };
+
+        assert_eq!(
+            values[idx("x_itemout_distribution_accounting_attr_name")],
+            "Main Account Split"
+        );
+        assert_eq!(
+            values[idx("x_itemout_distribution_accounting_segment_attr_type")],
+            "Cost Centre | GL account"
+        );
+        assert_eq!(
+            values[idx("x_itemout_distribution_accounting_segment_attr_id")],
+            "0001 | 4000"
+        );
+        assert_eq!(
+            values[idx("x_itemout_distribution_accounting_segment_attr_description")],
+            "COST_CTR | GL_ACC"
+        );
+        assert_eq!(values[idx("x_itemout_distribution_charge_money")], "123.45");
+        assert_eq!(
+            values[idx("x_itemout_distribution_charge_money_attr_currency")],
+            "USD"
+        );
     }
 
     #[test]
@@ -3158,7 +3365,8 @@ mod tests {
   </Request>
 </cXML>"#;
 
-        let rows = parse_cxml_content(xml).expect("invoice-detail cxml parsing should succeed");
+        let rows = parse_cxml_content(xml, CxmlMode::Mapped)
+            .expect("invoice-detail cxml parsing should succeed");
         assert_eq!(rows.len(), 2);
         let headers = &rows[0];
         let values = &rows[1];

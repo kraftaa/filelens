@@ -159,6 +159,19 @@ filelens inspect data/file.msg --parser hl7
 filelens inspect data/file.ttl --parser rdf
 ```
 
+CXML extraction mode:
+
+```bash
+# curated canonical fields only
+filelens schema data/order.cxml --parser cxml --cxml-mode mapped
+
+# path-based auto-captured fields only (x_* columns)
+filelens schema data/order.cxml --parser cxml --cxml-mode auto
+
+# both canonical + path-based fields
+filelens convert data/order.cxml --parser cxml --cxml-mode both --out data/order.parquet
+```
+
 If running from source, use `./target/release/filelens` instead of `filelens`.
 
 ## Works with dbt
