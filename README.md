@@ -1,6 +1,9 @@
 # filelens
 
-Turn messy files into clean tables in one command.
+Parse cXML, XML, JSON, and messy data files into clean tables — in one command.
+
+Most tools give you an XML tree.
+filelens gives you rows you can actually use.
 
 filelens is a CLI that helps you understand and clean messy data files.
 Most of the time, the hardest part is just understanding the file.
@@ -20,10 +23,25 @@ Built for real-world data engineering workflows.
 
 ## Quick start
 
+Install with pip:
+
 ```bash
 pip install filelens
+```
+
+Install with Homebrew:
+
+```bash
+brew tap kraftaa/filelens
+brew install filelens
+```
+
+Use it:
+
+```bash
 filelens inspect file.csv
 filelens convert file.csv --out file.parquet
+filelens convert po.cxml --parser cxml --out po.parquet
 ```
 
 ## Example
