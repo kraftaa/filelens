@@ -175,10 +175,13 @@ filelens inspect data/file.ttl --parser rdf
 
 CXML extraction mode:
 
-cXML parsing supports:
-- canonical fields (`mapped`)
-- raw extracted fields (`auto`)
-- or both (`both`)
+cXML mode controls which columns are emitted:
+
+- `mapped` (default): canonical columns only (`order_id`, `line_number`, `quantity`, ...)
+- `auto`: extracted path-based columns only (`x_*`)
+- `both`: union of `mapped` + `auto`
+
+If you do not pass `--cxml-mode`, filelens uses `mapped`.
 
 ```bash
 # curated canonical fields only
