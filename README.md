@@ -46,6 +46,7 @@ Inspect:
 ```bash
 filelens inspect sample.csv
 ```
+![Inspect messy CSV](docs/images/filelens_inspect.png)
 
 Output:
 
@@ -62,14 +63,16 @@ Warnings:
 ### One command
 
 ```bash
-filelens convert sample.csv --out sample.parquet
+filelens convert sample.cxml --out sample.parquet
 ```
+![Convert cXML both](docs/images/filelens_convert.png)
 
 What it does:
 - detects structure
 - skips metadata
 - infers schema
 - writes `sample.parquet`
+
 
 ### After
 
