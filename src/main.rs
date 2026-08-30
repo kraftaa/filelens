@@ -137,7 +137,7 @@ struct ColumnStats {
     string_count: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ColumnType {
     String,
     Int,
@@ -235,8 +235,7 @@ fn main() -> Result<()> {
 }
 
 fn run_inspect(input: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<()> {
-    let rows = read_rows(input, parser, cxml_mode)?;
-    let profile = build_profile(rows)?;
+    let profile = build_profile_for_input(input, parser, cxml_mode)?;
 
     let possible_numeric = profile
         .columns
@@ -310,8 +309,7 @@ fn collect_warnings(profile: &Profile) -> Vec<String> {
 }
 
 fn run_schema(input: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<()> {
-    let rows = read_rows(input, parser, cxml_mode)?;
-    let profile = build_profile(rows)?;
+    let profile = build_profile_for_input(input, parser, cxml_mode)?;
 
     let schema = SchemaDoc {
         columns: profile
@@ -450,8 +448,7 @@ fn process_one_file_inner(
     cxml_mode: CxmlMode,
     source_kind: &str,
 ) -> Result<FileProcessReport> {
-    let rows = read_rows(input, parser, cxml_mode)?;
-    let profile = build_profile(rows)?;
+    let profile = build_profile_for_input(input, parser, cxml_mode)?;
     let source_kind = classify_source_kind_from_profile(source_kind, &profile.columns);
     let warnings = collect_warnings(&profile);
 
@@ -1144,6 +1141,8 @@ fn parse_cxml_content(content: &str, cxml_mode: CxmlMode) -> Result<Vec<Vec<Stri
     let mut payload_timestamp = String::new();
     let mut ship_to_name = String::new();
     let mut bill_to_name = String::new();
+    let mut ship_to_postal_code = String::new();
+    let mut bill_to_postal_code = String::new();
     let mut invoice_purpose = String::new();
     let mut notice_id = String::new();
     let mut quote_id = String::new();
@@ -1205,6 +1204,8 @@ fn parse_cxml_content(content: &str, cxml_mode: CxmlMode) -> Result<Vec<Vec<Stri
                             quote_date: &quote_date,
                             ship_to_name: &ship_to_name,
                             bill_to_name: &bill_to_name,
+                            ship_to_postal_code: &ship_to_postal_code,
+                            bill_to_postal_code: &bill_to_postal_code,
                             header_extrinsics: &header_extrinsics,
                         });
                         if let Some(v) = attr_value(&reader, &event, "lineNumber") {
@@ -1318,6 +1319,8 @@ fn parse_cxml_content(content: &str, cxml_mode: CxmlMode) -> Result<Vec<Vec<Stri
                             quote_date: &quote_date,
                             ship_to_name: &ship_to_name,
                             bill_to_name: &bill_to_name,
+                            ship_to_postal_code: &ship_to_postal_code,
+                            bill_to_postal_code: &bill_to_postal_code,
                             header_extrinsics: &header_extrinsics,
                         });
                         if let Some(v) = attr_value(&reader, &event, "lineNumber") {
@@ -1404,6 +1407,18 @@ fn parse_cxml_content(content: &str, cxml_mode: CxmlMode) -> Result<Vec<Vec<Stri
                     && bill_to_name.is_empty()
                 {
                     bill_to_name = text.clone();
+                } else if path_ends_with(
+                    &path,
+                    &["ShipTo", "Address", "PostalAddress", "PostalCode"],
+                ) && ship_to_postal_code.is_empty()
+                {
+                    ship_to_postal_code = text.clone();
+                } else if path_ends_with(
+                    &path,
+                    &["BillTo", "Address", "PostalAddress", "PostalCode"],
+                ) && bill_to_postal_code.is_empty()
+                {
+                    bill_to_postal_code = text.clone();
                 } else if path_ends_with(&path, &["QuoteRequestHeader", "QuoteID"]) {
                     quote_id = text.clone();
                 } else if path_ends_with(&path, &["QuoteRequestHeader", "QuoteDate"]) {
@@ -1605,7 +1620,9 @@ fn parse_cxml_content(content: &str, cxml_mode: CxmlMode) -> Result<Vec<Vec<Stri
         "address_id",
         "address_name",
         "ship_to_name",
+        "ship_to_postal_code",
         "bill_to_name",
+        "bill_to_postal_code",
     ];
 
     let mut headers: Vec<String> = preferred
@@ -1760,6 +1777,8 @@ struct CxmlSeed<'a> {
     quote_date: &'a str,
     ship_to_name: &'a str,
     bill_to_name: &'a str,
+    ship_to_postal_code: &'a str,
+    bill_to_postal_code: &'a str,
     header_extrinsics: &'a HashMap<String, String>,
 }
 
@@ -1800,6 +1819,18 @@ fn seed_cxml_item_row(seed: CxmlSeed<'_>) -> HashMap<String, String> {
     }
     if !seed.bill_to_name.is_empty() {
         item.insert("bill_to_name".to_string(), seed.bill_to_name.to_string());
+    }
+    if !seed.ship_to_postal_code.is_empty() {
+        item.insert(
+            "ship_to_postal_code".to_string(),
+            seed.ship_to_postal_code.to_string(),
+        );
+    }
+    if !seed.bill_to_postal_code.is_empty() {
+        item.insert(
+            "bill_to_postal_code".to_string(),
+            seed.bill_to_postal_code.to_string(),
+        );
     }
     for (k, v) in seed.header_extrinsics {
         item.insert(k.clone(), v.clone());
@@ -3341,6 +3372,42 @@ fn build_profile(rows: Vec<Vec<String>>) -> Result<Profile> {
     })
 }
 
+fn build_profile_for_input(
+    input: &Path,
+    parser: ParseMode,
+    cxml_mode: CxmlMode,
+) -> Result<Profile> {
+    let rows = read_rows(input, parser, cxml_mode)?;
+    let mut profile = build_profile(rows)?;
+
+    let base_kind = detect_source_kind(input, parser);
+    let detected_kind = classify_source_kind_from_profile(&base_kind, &profile.columns);
+    let xml_auto_profile =
+        base_kind == "xml" && profile.columns.iter().all(|col| col.name.starts_with("x_"));
+
+    if base_kind == "cxml" || detected_kind == "cxml" || xml_auto_profile {
+        apply_cxml_semantic_type_contract(&mut profile);
+    }
+
+    Ok(profile)
+}
+
+fn apply_cxml_semantic_type_contract(profile: &mut Profile) {
+    for column in &mut profile.columns {
+        column.inferred_type = cxml_semantic_column_type(&column.name);
+    }
+}
+
+fn cxml_semantic_column_type(name: &str) -> ColumnType {
+    match name {
+        "quantity" | "unit_price" | "line_total" | "shipping_amount" | "discount_amount"
+        | "tax_amount" => ColumnType::Float,
+        // Canonical identifiers, codes, date/time values, descriptive values, dynamic
+        // extrinsics, and all x_* path fields remain lossless lexical strings.
+        _ => ColumnType::String,
+    }
+}
+
 fn detect_header_row(rows: &[Vec<String>]) -> usize {
     let scan_limit = rows.len().min(50);
     let mut best_idx = 0usize;
@@ -3879,6 +3946,197 @@ mod tests {
         let content = read_hard_cxml_fixture(name);
         parse_cxml_content(&content, mode)
             .unwrap_or_else(|_| panic!("failed to parse hard cxml fixture: {name}"))
+    }
+
+    fn cxml_contract_fixture_path(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples")
+            .join("public")
+            .join("cxml_type_contract")
+            .join(name)
+    }
+
+    #[test]
+    fn cxml_semantic_contract_preserves_lexical_identifiers_and_timestamps() {
+        let cases = [
+            (
+                "01_numeric_whole_values.cxml",
+                "00001234",
+                "00010001",
+                "00123456",
+                "00501",
+                "2026-08-30T09:15:00-04:00",
+            ),
+            (
+                "02_alphanumeric_decimal_values.cxml",
+                "PO-A12",
+                "PAYLOAD-ALPHA",
+                "00001234",
+                "00120",
+                "2026-08-30T18:45:30+05:30",
+            ),
+            (
+                "03_utc_mixed_values.cxml",
+                "42B",
+                "00000003",
+                "00000007",
+                "00901",
+                "2026-08-30T13:15:00Z",
+            ),
+        ];
+
+        for (fixture, order_id, payload_id, classification, postal_code, timestamp) in cases {
+            let content = fs::read_to_string(cxml_contract_fixture_path(fixture))
+                .unwrap_or_else(|_| panic!("failed to read cxml contract fixture: {fixture}"));
+            let rows = parse_cxml_content(&content, CxmlMode::Mapped)
+                .unwrap_or_else(|_| panic!("failed to parse cxml contract fixture: {fixture}"));
+            let headers = &rows[0];
+            let values = &rows[1];
+            let value = |name: &str| {
+                let idx = headers
+                    .iter()
+                    .position(|header| header == name)
+                    .unwrap_or_else(|| panic!("missing {name} in {fixture}"));
+                values[idx].as_str()
+            };
+
+            assert_eq!(value("order_id"), order_id);
+            assert_eq!(value("payload_id"), payload_id);
+            assert_eq!(value("classification"), classification);
+            assert_eq!(value("ship_to_postal_code"), postal_code);
+            assert_eq!(value("payload_timestamp"), timestamp);
+            assert_eq!(value("order_date"), timestamp);
+        }
+    }
+
+    #[test]
+    fn cxml_auto_fields_are_lossless_strings_in_auto_and_both_modes() {
+        let input = cxml_contract_fixture_path("01_numeric_whole_values.cxml");
+
+        let auto_profile = build_profile_for_input(&input, ParseMode::Cxml, CxmlMode::Auto)
+            .expect("auto cxml profile should build");
+        assert!(
+            auto_profile
+                .columns
+                .iter()
+                .all(|column| column.inferred_type == ColumnType::String)
+        );
+
+        let both_profile = build_profile_for_input(&input, ParseMode::Cxml, CxmlMode::Both)
+            .expect("both cxml profile should build");
+        let column_type = |name: &str| {
+            both_profile
+                .columns
+                .iter()
+                .find(|column| column.name == name)
+                .unwrap_or_else(|| panic!("missing both-mode column {name}"))
+                .inferred_type
+        };
+        assert_eq!(column_type("quantity"), ColumnType::Float);
+        assert_eq!(column_type("x_itemout_attr_quantity"), ColumnType::String);
+    }
+
+    #[test]
+    fn cxml_batch_contract_produces_compatible_shared_schemas() {
+        let input_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples")
+            .join("public")
+            .join("cxml_type_contract");
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock should follow unix epoch")
+            .as_nanos();
+        let out_dir = std::env::temp_dir().join(format!(
+            "filelens-cxml-contract-{}-{unique}",
+            std::process::id()
+        ));
+
+        run_batch(&input_dir, &out_dir, ParseMode::Cxml, CxmlMode::Mapped)
+            .expect("cxml contract batch should succeed");
+
+        let report_text = fs::read_to_string(out_dir.join("_filelens_report.json"))
+            .expect("batch report should be readable");
+        let report: serde_json::Value =
+            serde_json::from_str(&report_text).expect("batch report should be valid json");
+        let files = report
+            .get("files")
+            .and_then(serde_json::Value::as_array)
+            .expect("batch report should contain files");
+        assert_eq!(files.len(), 3);
+
+        let expected = [
+            ("order_id", "string"),
+            ("order_date", "string"),
+            ("payload_id", "string"),
+            ("payload_timestamp", "string"),
+            ("line_number", "string"),
+            ("quantity", "float"),
+            ("supplier_part_id", "string"),
+            ("supplier_part_auxiliary_id", "string"),
+            ("unit_price", "float"),
+            ("classification", "string"),
+            ("ship_to_postal_code", "string"),
+            ("bill_to_postal_code", "string"),
+        ];
+
+        for file in files {
+            assert_eq!(
+                file.get("status").and_then(serde_json::Value::as_str),
+                Some("ok")
+            );
+            let input_file = file
+                .get("input_file")
+                .and_then(serde_json::Value::as_str)
+                .expect("file report should contain input path");
+            let schema = file
+                .get("schema")
+                .and_then(serde_json::Value::as_array)
+                .expect("file report should contain schema");
+            for (expected_name, expected_type) in expected {
+                let actual_type = schema.iter().find_map(|column| {
+                    (column.get("name").and_then(serde_json::Value::as_str) == Some(expected_name))
+                        .then(|| column.get("type").and_then(serde_json::Value::as_str))
+                        .flatten()
+                });
+                assert_eq!(
+                    actual_type,
+                    Some(expected_type),
+                    "incompatible type for {expected_name} in {}",
+                    input_file
+                );
+            }
+
+            let (expected_order_id, expected_timestamp, expected_postal_code) =
+                if input_file.ends_with("01_numeric_whole_values.cxml") {
+                    ("00001234", "2026-08-30T09:15:00-04:00", "00501")
+                } else if input_file.ends_with("02_alphanumeric_decimal_values.cxml") {
+                    ("PO-A12", "2026-08-30T18:45:30+05:30", "00120")
+                } else {
+                    ("42B", "2026-08-30T13:15:00Z", "00901")
+                };
+            let output_file = file
+                .get("output_file")
+                .and_then(serde_json::Value::as_str)
+                .expect("file report should contain output path");
+            let parquet = File::open(output_file).expect("parquet output should open");
+            let dataframe = ParquetReader::new(parquet)
+                .finish()
+                .expect("parquet output should read");
+            let string_value = |name: &str| {
+                dataframe
+                    .column(name)
+                    .unwrap_or_else(|_| panic!("missing parquet column {name}"))
+                    .str()
+                    .unwrap_or_else(|_| panic!("parquet column {name} should be string"))
+                    .get(0)
+                    .unwrap_or_else(|| panic!("parquet column {name} should have a value"))
+            };
+            assert_eq!(string_value("order_id"), expected_order_id);
+            assert_eq!(string_value("payload_timestamp"), expected_timestamp);
+            assert_eq!(string_value("ship_to_postal_code"), expected_postal_code);
+        }
+
+        fs::remove_dir_all(&out_dir).expect("temporary batch output should be removable");
     }
 
     #[test]

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cXML payloadID="00010001" timestamp="2026-08-30T09:15:00-04:00">
+  <Request>
+    <OrderRequest>
+      <OrderRequestHeader orderID="00001234" orderDate="2026-08-30T09:15:00-04:00">
+        <ShipTo>
+          <Address>
+            <Name>Numeric Order Lab</Name>
+            <PostalAddress><PostalCode>00501</PostalCode></PostalAddress>
+          </Address>
+        </ShipTo>
+        <BillTo>
+          <Address>
+            <Name>Numeric Order Finance</Name>
+            <PostalAddress><PostalCode>02108</PostalCode></PostalAddress>
+          </Address>
+        </BillTo>
+      </OrderRequestHeader>
+      <ItemOut lineNumber="001" quantity="2">
+        <ItemID>
+          <SupplierPartID>00004567</SupplierPartID>
+          <SupplierPartAuxiliaryID>000090</SupplierPartAuxiliaryID>
+        </ItemID>
+        <ItemDetail>
+          <UnitPrice><Money currency="USD">12</Money></UnitPrice>
+          <Description>Whole-value item</Description>
+          <UnitOfMeasure>EA</UnitOfMeasure>
+          <Classification domain="UNSPSC">00123456</Classification>
+        </ItemDetail>
+      </ItemOut>
+    </OrderRequest>
+  </Request>
+</cXML>

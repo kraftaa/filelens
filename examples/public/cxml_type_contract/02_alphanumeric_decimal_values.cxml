@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cXML payloadID="PAYLOAD-ALPHA" timestamp="2026-08-30T18:45:30+05:30">
+  <Request>
+    <OrderRequest>
+      <OrderRequestHeader orderID="PO-A12" orderDate="2026-08-30T18:45:30+05:30">
+        <ShipTo>
+          <Address>
+            <Name>Decimal Order Lab</Name>
+            <PostalAddress><PostalCode>00120</PostalCode></PostalAddress>
+          </Address>
+        </ShipTo>
+        <BillTo>
+          <Address>
+            <Name>Decimal Order Finance</Name>
+            <PostalAddress><PostalCode>00017</PostalCode></PostalAddress>
+          </Address>
+        </BillTo>
+      </OrderRequestHeader>
+      <ItemOut lineNumber="A-1" quantity="2.5">
+        <ItemID>
+          <SupplierPartID>SKU-ALPHA</SupplierPartID>
+          <SupplierPartAuxiliaryID>AUX-09</SupplierPartAuxiliaryID>
+        </ItemID>
+        <ItemDetail>
+          <UnitPrice><Money currency="EUR">12.75</Money></UnitPrice>
+          <Description>Decimal-value item</Description>
+          <UnitOfMeasure>KG</UnitOfMeasure>
+          <Classification domain="UNSPSC">00001234</Classification>
+        </ItemDetail>
+      </ItemOut>
+    </OrderRequest>
+  </Request>
+</cXML>

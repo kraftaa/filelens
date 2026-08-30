@@ -23,17 +23,37 @@ Built for real-world data engineering workflows.
 
 ## Quick start
 
-Install with pip:
-
-```bash
-pip install filelens
-```
+### macOS (recommended)
 
 Install with Homebrew:
 
 ```bash
 brew tap kraftaa/filelens
+brew trust --formula kraftaa/filelens/filelens
 brew install filelens
+```
+
+Homebrew 6 and later require explicit trust for formulae from third-party taps.
+
+Upgrade with:
+
+```bash
+brew update
+brew upgrade filelens
+```
+
+### pipx fallback
+
+If Homebrew is unavailable, install the PyPI package in an isolated environment:
+
+```bash
+pipx install filelens
+```
+
+Upgrade a pipx installation with:
+
+```bash
+pipx upgrade filelens
 ```
 
 Use it:
@@ -226,6 +246,24 @@ cXML mode controls which columns are emitted:
 - `both`: union of `mapped` + `auto`
 
 If you do not pass `--cxml-mode`, filelens uses `mapped`.
+
+### cXML semantic type contract
+
+cXML output uses a semantic contract so files from the same family do not change
+Parquet types based on the values present in one file:
+
+| Fields | Stable type | Policy |
+| --- | --- | --- |
+| `order_id`, `payload_id`, `notice_id`, `quote_id`, `line_number`, `supplier_part_id`, `supplier_part_auxiliary_id`, `classification`, `classification_domain`, `item_classification`, `address_id`, `ship_to_postal_code`, `bill_to_postal_code` | string | Identifiers and codes retain leading zeros and alphanumeric values. |
+| `order_date`, `quote_date`, `payload_timestamp`, `requested_delivery_date` | string | The complete source value is retained, including ISO-8601 time and UTC offset. |
+| `quantity`, `unit_price`, `line_total`, `shipping_amount`, `discount_amount`, `tax_amount` | float | Whole and decimal values share one Parquet numeric type (`Float64`). |
+| Other canonical fields and dynamic extrinsics | string | Values remain lossless unless a stable semantic numeric meaning is known. |
+| All auto-extracted `x_*` fields | string | Path extraction is intentionally lexical; the XML path alone is not enough to infer a safe semantic type. |
+
+The `x_*` rule also applies in `both` mode: a canonical `quantity` is a float,
+while the corresponding auto-extracted quantity remains a string. FileLens does
+not apply organization-specific price, currency, or catalog validation because
+those rules cannot be derived from the XML document alone.
 
 ```bash
 # curated canonical fields only

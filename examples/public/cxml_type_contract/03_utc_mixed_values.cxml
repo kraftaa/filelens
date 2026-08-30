@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cXML payloadID="00000003" timestamp="2026-08-30T13:15:00Z">
+  <Request>
+    <OrderRequest>
+      <OrderRequestHeader orderID="42B" orderDate="2026-08-30T13:15:00Z">
+        <ShipTo>
+          <Address>
+            <Name>UTC Order Lab</Name>
+            <PostalAddress><PostalCode>00901</PostalCode></PostalAddress>
+          </Address>
+        </ShipTo>
+        <BillTo>
+          <Address>
+            <Name>UTC Order Finance</Name>
+            <PostalAddress><PostalCode>01001</PostalCode></PostalAddress>
+          </Address>
+        </BillTo>
+      </OrderRequestHeader>
+      <ItemOut lineNumber="3" quantity="0.125">
+        <ItemID>
+          <SupplierPartID>00000001</SupplierPartID>
+          <SupplierPartAuxiliaryID>AUX-0003</SupplierPartAuxiliaryID>
+        </ItemID>
+        <ItemDetail>
+          <UnitPrice><Money currency="USD">7.5</Money></UnitPrice>
+          <Description>UTC-value item</Description>
+          <UnitOfMeasure>L</UnitOfMeasure>
+          <Classification domain="CUSTOM">00000007</Classification>
+        </ItemDetail>
+      </ItemOut>
+    </OrderRequest>
+  </Request>
+</cXML>
