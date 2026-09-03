@@ -63,6 +63,86 @@ filelens inspect file.csv
 filelens convert file-or-folder --out-dir output/
 ```
 
+## File contracts in five minutes
+
+Create a deterministic contract from a trusted supplier delivery:
+
+```bash
+filelens contract create examples/public/contract/trusted_supplier.csv \
+  --out supplier.contract.json
+```
+
+The reviewable JSON records contract format version `1`, the resolved parser and
+format, one-based header position, metadata-row count, delimiter, canonical field
+names, and logical types. Parser overrides are supported while creating a
+contract, for example `--parser json` or `--parser cxml --cxml-mode both`; the
+resolved parser and cXML mode are stored and reused during checks.
+
+Check a compatible delivery:
+
+```bash
+filelens contract check examples/public/contract/compatible_supplier.csv \
+  --against supplier.contract.json
+```
+
+```text
+Contract check: COMPATIBLE
+- [INFO] numeric_widening: field "unit_price" widened compatibly from int to float
+  expected: int; observed: float
+- [WARNING] additional_field: additional field "notes" was observed
+  expected: absent; observed: string
+Summary: 0 breaking, 1 warning, 1 informational
+```
+
+Check a breaking delivery:
+
+```bash
+filelens contract check examples/public/contract/breaking_supplier.csv \
+  --against supplier.contract.json
+```
+
+```text
+Contract check: VIOLATION
+- [BREAKING] missing_field: expected field "quantity" is missing
+  expected: int; observed: missing
+- [BREAKING] missing_field: expected field "unit_price" is missing
+  expected: int; observed: missing
+Summary: 2 breaking, 0 warning, 0 informational
+```
+
+Add `--json` for a machine-readable report. Reports contain field/path names and
+expected versus observed types, but never source rows or field values.
+
+### Compatibility and exit policy
+
+| Change | Severity | Exit status |
+| --- | --- | --- |
+| Missing expected field/path | breaking | `1` |
+| Incompatible logical type | breaking | `1` |
+| Header position, delimiter, or input format changed | breaking | `1` |
+| Additional field/path | warning | `0` when no breaking finding exists |
+| Compatible `int` to `float` widening | informational | `0` |
+| Invalid invocation or unreadable/invalid contract | operational error | `2` |
+| Incoming file cannot be parsed | breaking operational error | `2` |
+
+Parse failure uses exit `2`, not `1`: FileLens could not evaluate compatibility,
+so it must not claim that a valid observed structure violated the contract. The
+policy is deterministic, column order is ignored, and `contract check` never
+modifies the incoming file.
+
+Use the status in CI or a shell script:
+
+```bash
+filelens contract check incoming.csv --against supplier.contract.json
+status=$?
+
+case "$status" in
+  0) echo "compatible" ;;
+  1) echo "contract violation" >&2; exit 1 ;;
+  2) echo "contract could not be evaluated" >&2; exit 2 ;;
+esac
+```
+
 ## Example
 
 ### Before

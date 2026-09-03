@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
@@ -14,7 +14,7 @@ use quick_xml::{Reader as XmlReader, name::QName};
 use rio_api::model::{Literal as RioLiteral, Subject as RioSubject, Term as RioTerm};
 use rio_api::parser::TriplesParser;
 use rio_turtle::TurtleParser;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
 const DATE_FORMATS: &[&str] = &[
@@ -27,6 +27,8 @@ const DATETIME_FORMATS: &[&str] = &[
     "%m/%d/%Y %H:%M:%S",
     "%Y-%m-%dT%H:%M:%S",
 ];
+
+const CONTRACT_FORMAT_VERSION: u32 = 1;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -94,9 +96,44 @@ enum Commands {
         #[arg(long, value_enum, default_value_t = CxmlMode::Mapped)]
         cxml_mode: CxmlMode,
     },
+    /// Create or check a deterministic file contract
+    Contract {
+        #[command(subcommand)]
+        command: ContractCommands,
+    },
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Subcommand)]
+enum ContractCommands {
+    /// Create a contract from a trusted input file
+    Create {
+        /// Trusted input file
+        input: PathBuf,
+        /// Output contract JSON path
+        #[arg(long)]
+        out: PathBuf,
+        /// Force parser mode (auto, tabular, cxml, json, fhir, hl7, cda, rdf)
+        #[arg(long, value_enum, default_value_t = ParseMode::Auto)]
+        parser: ParseMode,
+        /// cXML extraction mode stored in the contract
+        #[arg(long, value_enum, default_value_t = CxmlMode::Mapped)]
+        cxml_mode: CxmlMode,
+    },
+    /// Check an incoming file against a contract
+    Check {
+        /// Incoming file to check
+        input: PathBuf,
+        /// Contract JSON path
+        #[arg(long)]
+        against: PathBuf,
+        /// Print a machine-readable JSON report
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
 enum ParseMode {
     Auto,
     Tabular,
@@ -108,7 +145,8 @@ enum ParseMode {
     Rdf,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
 enum CxmlMode {
     Mapped,
     Auto,
@@ -137,7 +175,8 @@ struct ColumnStats {
     string_count: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 enum ColumnType {
     String,
     Int,
@@ -199,6 +238,85 @@ struct BatchReport {
     files: Vec<FileProcessReport>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct FileContract {
+    contract_version: u32,
+    format: String,
+    parser: ParseMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cxml_mode: Option<CxmlMode>,
+    structure: ContractStructure,
+    fields: Vec<ContractField>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ContractStructure {
+    /// One-based header position for reviewability.
+    header_row: usize,
+    metadata_rows: usize,
+    delimiter: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct ContractField {
+    name: String,
+    #[serde(rename = "type")]
+    logical_type: ColumnType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum ContractSeverity {
+    Breaking,
+    Warning,
+    Info,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct ContractFinding {
+    severity: ContractSeverity,
+    code: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expected: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    observed: Option<String>,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ContractCheckSummary {
+    breaking: usize,
+    warnings: usize,
+    informational: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct ContractCheckReport {
+    contract_version: u32,
+    status: String,
+    compatible: bool,
+    findings: Vec<ContractFinding>,
+    summary: ContractCheckSummary,
+}
+
+#[derive(Debug, Serialize)]
+struct ContractErrorBody {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    severity: Option<ContractSeverity>,
+    code: String,
+    message: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ContractErrorReport {
+    contract_version: Option<u32>,
+    status: String,
+    compatible: bool,
+    error: ContractErrorBody,
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
@@ -231,6 +349,13 @@ fn main() -> Result<()> {
             parser,
             cxml_mode,
         } => run_batch(&input, &out_dir, parser, cxml_mode),
+        Commands::Contract { command } => {
+            let exit_code = run_contract_command(command)?;
+            if exit_code != 0 {
+                std::process::exit(exit_code);
+            }
+            Ok(())
+        }
     }
 }
 
@@ -323,6 +448,443 @@ fn run_schema(input: &Path, parser: ParseMode, cxml_mode: CxmlMode) -> Result<()
     };
 
     println!("{}", serde_json::to_string_pretty(&schema)?);
+    Ok(())
+}
+
+fn run_contract_command(command: ContractCommands) -> Result<i32> {
+    match command {
+        ContractCommands::Create {
+            input,
+            out,
+            parser,
+            cxml_mode,
+        } => match create_file_contract(&input, parser, cxml_mode) {
+            Ok(contract) => {
+                if let Some(parent) = out.parent()
+                    && !parent.as_os_str().is_empty()
+                {
+                    fs::create_dir_all(parent).with_context(|| {
+                        format!("failed to create contract directory: {}", parent.display())
+                    })?;
+                }
+                let mut json = serde_json::to_string_pretty(&contract)?;
+                json.push('\n');
+                fs::write(&out, json)
+                    .with_context(|| format!("failed to write contract file: {}", out.display()))?;
+                println!("Created contract: {}", out.display());
+                println!("- format: {}", contract.format);
+                println!("- parser: {}", parse_mode_name(contract.parser));
+                println!("- fields: {}", contract.fields.len());
+                Ok(0)
+            }
+            Err(err) => {
+                eprintln!("Contract creation failed: {err:#}");
+                Ok(2)
+            }
+        },
+        ContractCommands::Check {
+            input,
+            against,
+            json,
+        } => run_contract_check(&input, &against, json),
+    }
+}
+
+fn create_file_contract(
+    input: &Path,
+    requested_parser: ParseMode,
+    cxml_mode: CxmlMode,
+) -> Result<FileContract> {
+    let profile = build_profile_for_input(input, requested_parser, cxml_mode)?;
+    let parser = resolved_contract_parser(input, requested_parser, &profile);
+    let format = contract_input_format(input, parser);
+    let delimiter = contract_delimiter(input, parser)?;
+    let fields = profile
+        .columns
+        .iter()
+        .map(|column| ContractField {
+            name: column.name.clone(),
+            logical_type: column.inferred_type,
+        })
+        .collect();
+
+    Ok(FileContract {
+        contract_version: CONTRACT_FORMAT_VERSION,
+        format,
+        parser,
+        cxml_mode: (parser == ParseMode::Cxml).then_some(cxml_mode),
+        structure: ContractStructure {
+            header_row: profile.header_row + 1,
+            metadata_rows: profile.metadata_rows,
+            delimiter,
+        },
+        fields,
+    })
+}
+
+fn run_contract_check(input: &Path, contract_path: &Path, json: bool) -> Result<i32> {
+    let contract = match read_file_contract(contract_path) {
+        Ok(contract) => contract,
+        Err(err) => {
+            print_contract_operational_error(
+                json,
+                None,
+                None,
+                "invalid_contract",
+                &format!("{err:#}"),
+            )?;
+            return Ok(2);
+        }
+    };
+
+    let cxml_mode = contract.cxml_mode.unwrap_or(CxmlMode::Mapped);
+    let observed = match create_file_contract(input, contract.parser, cxml_mode) {
+        Ok(observed) => observed,
+        Err(err) => {
+            print_contract_operational_error(
+                json,
+                Some(contract.contract_version),
+                Some(ContractSeverity::Breaking),
+                "parse_failure",
+                &format!("{err:#}"),
+            )?;
+            return Ok(2);
+        }
+    };
+
+    let report = compare_file_contracts(&contract, &observed);
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        print_contract_human_report(&report);
+    }
+
+    Ok(if report.compatible { 0 } else { 1 })
+}
+
+fn read_file_contract(path: &Path) -> Result<FileContract> {
+    let content = fs::read_to_string(path)
+        .with_context(|| format!("failed to read contract file: {}", path.display()))?;
+    let contract: FileContract = serde_json::from_str(&content)
+        .with_context(|| format!("invalid contract JSON: {}", path.display()))?;
+    validate_file_contract(&contract)?;
+    Ok(contract)
+}
+
+fn validate_file_contract(contract: &FileContract) -> Result<()> {
+    if contract.contract_version != CONTRACT_FORMAT_VERSION {
+        bail!(
+            "unsupported contract_version {}; supported version is {}",
+            contract.contract_version,
+            CONTRACT_FORMAT_VERSION
+        );
+    }
+    if contract.structure.header_row == 0 {
+        bail!("contract structure.header_row must be one-based and greater than zero");
+    }
+    if contract.structure.metadata_rows + 1 != contract.structure.header_row {
+        bail!("contract header_row must equal metadata_rows + 1");
+    }
+    let mut names = HashSet::new();
+    for field in &contract.fields {
+        if field.name.trim().is_empty() {
+            bail!("contract field names cannot be empty");
+        }
+        if !names.insert(field.name.as_str()) {
+            bail!("contract contains duplicate field: {}", field.name);
+        }
+    }
+    Ok(())
+}
+
+fn resolved_contract_parser(input: &Path, requested: ParseMode, profile: &Profile) -> ParseMode {
+    if requested != ParseMode::Auto {
+        return requested;
+    }
+
+    let base_kind = detect_source_kind(input, requested);
+    match classify_source_kind_from_profile(&base_kind, &profile.columns).as_str() {
+        "tabular" => ParseMode::Tabular,
+        "cxml" | "naaccr" => ParseMode::Cxml,
+        "json" => ParseMode::Json,
+        "fhir" => ParseMode::Fhir,
+        "hl7" => ParseMode::Hl7,
+        "cda" => ParseMode::Cda,
+        "rdf" => ParseMode::Rdf,
+        _ => match base_kind.as_str() {
+            "xml" => ParseMode::Cxml,
+            "json" => ParseMode::Json,
+            "hl7" => ParseMode::Hl7,
+            "rdf" => ParseMode::Rdf,
+            _ => ParseMode::Tabular,
+        },
+    }
+}
+
+fn contract_input_format(input: &Path, parser: ParseMode) -> String {
+    match parser {
+        ParseMode::Cxml => "cxml".to_string(),
+        ParseMode::Json | ParseMode::Fhir => "json".to_string(),
+        ParseMode::Cda => "xml".to_string(),
+        ParseMode::Hl7 => "hl7".to_string(),
+        ParseMode::Rdf => "rdf".to_string(),
+        ParseMode::Tabular | ParseMode::Auto => {
+            let ext = input
+                .extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or("tabular")
+                .to_ascii_lowercase();
+            if matches!(ext.as_str(), "xlsx" | "xlsm" | "xls") {
+                "excel".to_string()
+            } else {
+                ext
+            }
+        }
+    }
+}
+
+fn contract_delimiter(input: &Path, parser: ParseMode) -> Result<Option<String>> {
+    if parser != ParseMode::Tabular {
+        return Ok(None);
+    }
+    let ext = input
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if matches!(ext.as_str(), "xlsx" | "xlsm" | "xls") {
+        return Ok(None);
+    }
+    let content = read_text_file_lossy(input, "tabular contract input")?;
+    Ok(Some(delimiter_name(detect_delimiter(&content)).to_string()))
+}
+
+fn delimiter_name(delimiter: u8) -> &'static str {
+    match delimiter {
+        b',' => "comma",
+        b'\t' => "tab",
+        b';' => "semicolon",
+        b'|' => "pipe",
+        _ => "unknown",
+    }
+}
+
+fn parse_mode_name(parser: ParseMode) -> &'static str {
+    match parser {
+        ParseMode::Auto => "auto",
+        ParseMode::Tabular => "tabular",
+        ParseMode::Cxml => "cxml",
+        ParseMode::Json => "json",
+        ParseMode::Fhir => "fhir",
+        ParseMode::Hl7 => "hl7",
+        ParseMode::Cda => "cda",
+        ParseMode::Rdf => "rdf",
+    }
+}
+
+fn compare_file_contracts(expected: &FileContract, observed: &FileContract) -> ContractCheckReport {
+    let mut findings = Vec::new();
+
+    if expected.format != observed.format {
+        findings.push(structural_finding(
+            "format_changed",
+            "input format changed",
+            &expected.format,
+            &observed.format,
+        ));
+    }
+    if expected.structure.header_row != observed.structure.header_row {
+        findings.push(structural_finding(
+            "header_position_changed",
+            "header position changed",
+            &expected.structure.header_row.to_string(),
+            &observed.structure.header_row.to_string(),
+        ));
+    }
+    if expected.structure.delimiter != observed.structure.delimiter {
+        findings.push(structural_finding(
+            "delimiter_changed",
+            "tabular delimiter changed",
+            expected.structure.delimiter.as_deref().unwrap_or("none"),
+            observed.structure.delimiter.as_deref().unwrap_or("none"),
+        ));
+    }
+
+    let expected_fields: BTreeMap<&str, ColumnType> = expected
+        .fields
+        .iter()
+        .map(|field| (field.name.as_str(), field.logical_type))
+        .collect();
+    let observed_fields: BTreeMap<&str, ColumnType> = observed
+        .fields
+        .iter()
+        .map(|field| (field.name.as_str(), field.logical_type))
+        .collect();
+
+    for (name, expected_type) in &expected_fields {
+        match observed_fields.get(name) {
+            None => findings.push(ContractFinding {
+                severity: ContractSeverity::Breaking,
+                code: "missing_field".to_string(),
+                field: Some((*name).to_string()),
+                expected: Some(expected_type.as_schema_str().to_string()),
+                observed: Some("missing".to_string()),
+                message: format!("expected field \"{name}\" is missing"),
+            }),
+            Some(observed_type) if expected_type == observed_type => {}
+            Some(ColumnType::Float) if *expected_type == ColumnType::Int => {
+                findings.push(ContractFinding {
+                    severity: ContractSeverity::Info,
+                    code: "numeric_widening".to_string(),
+                    field: Some((*name).to_string()),
+                    expected: Some("int".to_string()),
+                    observed: Some("float".to_string()),
+                    message: format!("field \"{name}\" widened compatibly from int to float"),
+                });
+            }
+            Some(ColumnType::Int) if *expected_type == ColumnType::Float => {
+                findings.push(ContractFinding {
+                    severity: ContractSeverity::Info,
+                    code: "numeric_values_are_integral".to_string(),
+                    field: Some((*name).to_string()),
+                    expected: Some("float".to_string()),
+                    observed: Some("int".to_string()),
+                    message: format!(
+                        "field \"{name}\" contains integral values compatible with float"
+                    ),
+                });
+            }
+            Some(observed_type) => findings.push(ContractFinding {
+                severity: ContractSeverity::Breaking,
+                code: "incompatible_type".to_string(),
+                field: Some((*name).to_string()),
+                expected: Some(expected_type.as_schema_str().to_string()),
+                observed: Some(observed_type.as_schema_str().to_string()),
+                message: format!(
+                    "field \"{name}\" changed from {} to {}",
+                    expected_type.as_schema_str(),
+                    observed_type.as_schema_str()
+                ),
+            }),
+        }
+    }
+
+    for (name, observed_type) in &observed_fields {
+        if !expected_fields.contains_key(name) {
+            findings.push(ContractFinding {
+                severity: ContractSeverity::Warning,
+                code: "additional_field".to_string(),
+                field: Some((*name).to_string()),
+                expected: Some("absent".to_string()),
+                observed: Some(observed_type.as_schema_str().to_string()),
+                message: format!("additional field \"{name}\" was observed"),
+            });
+        }
+    }
+
+    let breaking = findings
+        .iter()
+        .filter(|finding| finding.severity == ContractSeverity::Breaking)
+        .count();
+    let warnings = findings
+        .iter()
+        .filter(|finding| finding.severity == ContractSeverity::Warning)
+        .count();
+    let informational = findings
+        .iter()
+        .filter(|finding| finding.severity == ContractSeverity::Info)
+        .count();
+    let compatible = breaking == 0;
+
+    ContractCheckReport {
+        contract_version: expected.contract_version,
+        status: if compatible {
+            "compatible".to_string()
+        } else {
+            "violation".to_string()
+        },
+        compatible,
+        findings,
+        summary: ContractCheckSummary {
+            breaking,
+            warnings,
+            informational,
+        },
+    }
+}
+
+fn structural_finding(
+    code: &str,
+    message: &str,
+    expected: &str,
+    observed: &str,
+) -> ContractFinding {
+    ContractFinding {
+        severity: ContractSeverity::Breaking,
+        code: code.to_string(),
+        field: None,
+        expected: Some(expected.to_string()),
+        observed: Some(observed.to_string()),
+        message: message.to_string(),
+    }
+}
+
+fn print_contract_human_report(report: &ContractCheckReport) {
+    println!(
+        "Contract check: {}",
+        if report.compatible {
+            "COMPATIBLE"
+        } else {
+            "VIOLATION"
+        }
+    );
+    if report.findings.is_empty() {
+        println!("- no changes detected");
+    } else {
+        for finding in &report.findings {
+            let severity = match finding.severity {
+                ContractSeverity::Breaking => "BREAKING",
+                ContractSeverity::Warning => "WARNING",
+                ContractSeverity::Info => "INFO",
+            };
+            println!("- [{severity}] {}: {}", finding.code, finding.message);
+            if let (Some(expected), Some(observed)) = (&finding.expected, &finding.observed) {
+                println!("  expected: {expected}; observed: {observed}");
+            }
+        }
+    }
+    println!(
+        "Summary: {} breaking, {} warning, {} informational",
+        report.summary.breaking, report.summary.warnings, report.summary.informational
+    );
+}
+
+fn print_contract_operational_error(
+    json: bool,
+    contract_version: Option<u32>,
+    severity: Option<ContractSeverity>,
+    code: &str,
+    message: &str,
+) -> Result<()> {
+    if json {
+        let report = ContractErrorReport {
+            contract_version,
+            status: "error".to_string(),
+            compatible: false,
+            error: ContractErrorBody {
+                severity,
+                code: code.to_string(),
+                message: message.to_string(),
+            },
+        };
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        if severity == Some(ContractSeverity::Breaking) {
+            eprintln!("Contract check failed [BREAKING {code}]: {message}");
+        } else {
+            eprintln!("Contract check failed [{code}]: {message}");
+        }
+    }
     Ok(())
 }
 
@@ -3526,13 +4088,17 @@ fn analyze_column(index: usize, name: String, values: &[&str]) -> ColumnStats {
         string_count += 1;
     }
 
-    let inferred_type = infer_type(
-        non_null_count,
-        numeric_count,
-        int_count,
-        bool_count,
-        date_count,
-    );
+    let inferred_type = if is_semantic_identifier_column(&name) {
+        ColumnType::String
+    } else {
+        infer_type(
+            non_null_count,
+            numeric_count,
+            int_count,
+            bool_count,
+            date_count,
+        )
+    };
 
     ColumnStats {
         index,
@@ -3545,6 +4111,16 @@ fn analyze_column(index: usize, name: String, values: &[&str]) -> ColumnStats {
         date_count,
         string_count,
     }
+}
+
+fn is_semantic_identifier_column(name: &str) -> bool {
+    name == "id"
+        || name.ends_with("_id")
+        || name.ends_with("_code")
+        || matches!(
+            name,
+            "classification" | "postal_code" | "postcode" | "zip" | "zip_code" | "zipcode"
+        )
 }
 
 fn infer_type(
@@ -4516,5 +5092,248 @@ mod tests {
         };
         assert!(batch_has_failures(&[ok.clone(), err]));
         assert!(!batch_has_failures(&[ok]));
+    }
+
+    fn contract_test_dir(label: &str) -> PathBuf {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock should follow unix epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "filelens-contract-{label}-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).expect("contract test directory should be created");
+        path
+    }
+
+    fn write_contract_test_file(dir: &Path, name: &str, content: &str) -> PathBuf {
+        let path = dir.join(name);
+        fs::write(&path, content).expect("contract test fixture should be written");
+        path
+    }
+
+    fn contract_finding<'a>(
+        report: &'a ContractCheckReport,
+        code: &str,
+    ) -> Option<&'a ContractFinding> {
+        report.findings.iter().find(|finding| finding.code == code)
+    }
+
+    #[test]
+    fn contract_detects_removed_and_added_columns_but_ignores_reordering() {
+        let dir = contract_test_dir("columns");
+        let trusted = write_contract_test_file(&dir, "trusted.csv", "id,count,name\n001,1,A\n");
+        let removed = write_contract_test_file(&dir, "removed.csv", "id,name\n002,B\n");
+        let added =
+            write_contract_test_file(&dir, "added.csv", "id,count,name,notes\n002,2,B,new\n");
+        let reordered = write_contract_test_file(&dir, "reordered.csv", "name,id,count\nB,002,2\n");
+        let contract = create_file_contract(&trusted, ParseMode::Auto, CxmlMode::Mapped)
+            .expect("trusted contract should build");
+
+        let removed_report = compare_file_contracts(
+            &contract,
+            &create_file_contract(&removed, contract.parser, CxmlMode::Mapped)
+                .expect("removed fixture should parse"),
+        );
+        assert!(!removed_report.compatible);
+        let missing = contract_finding(&removed_report, "missing_field")
+            .expect("removed field should be reported");
+        assert_eq!(missing.field.as_deref(), Some("count"));
+        assert_eq!(missing.severity, ContractSeverity::Breaking);
+
+        let added_report = compare_file_contracts(
+            &contract,
+            &create_file_contract(&added, contract.parser, CxmlMode::Mapped)
+                .expect("added fixture should parse"),
+        );
+        assert!(added_report.compatible);
+        assert_eq!(
+            contract_finding(&added_report, "additional_field")
+                .expect("added field should be reported")
+                .severity,
+            ContractSeverity::Warning
+        );
+
+        let reordered_report = compare_file_contracts(
+            &contract,
+            &create_file_contract(&reordered, contract.parser, CxmlMode::Mapped)
+                .expect("reordered fixture should parse"),
+        );
+        assert!(reordered_report.compatible);
+        assert!(reordered_report.findings.is_empty());
+
+        fs::remove_dir_all(dir).expect("contract test directory should be removed");
+    }
+
+    #[test]
+    fn contract_detects_header_and_delimiter_changes() {
+        let dir = contract_test_dir("structure");
+        let trusted = write_contract_test_file(&dir, "trusted.csv", "id,count,name\n001,1,A\n");
+        let moved = write_contract_test_file(
+            &dir,
+            "moved.csv",
+            "Supplier export\nGenerated 2026-08-30\nid,count,name\n002,2,B\n",
+        );
+        let delimiter = write_contract_test_file(&dir, "delimiter.csv", "id;count;name\n002;2;B\n");
+        let contract = create_file_contract(&trusted, ParseMode::Auto, CxmlMode::Mapped)
+            .expect("trusted contract should build");
+
+        let moved_report = compare_file_contracts(
+            &contract,
+            &create_file_contract(&moved, contract.parser, CxmlMode::Mapped)
+                .expect("moved-header fixture should parse"),
+        );
+        assert!(!moved_report.compatible);
+        assert!(contract_finding(&moved_report, "header_position_changed").is_some());
+
+        let delimiter_report = compare_file_contracts(
+            &contract,
+            &create_file_contract(&delimiter, contract.parser, CxmlMode::Mapped)
+                .expect("delimiter fixture should parse"),
+        );
+        assert!(!delimiter_report.compatible);
+        assert!(contract_finding(&delimiter_report, "delimiter_changed").is_some());
+
+        fs::remove_dir_all(dir).expect("contract test directory should be removed");
+    }
+
+    #[test]
+    fn contract_classifies_numeric_widening_as_informational() {
+        let dir = contract_test_dir("widening");
+        let trusted = write_contract_test_file(&dir, "trusted.csv", "count\n1\n2\n");
+        let widened = write_contract_test_file(&dir, "widened.csv", "count\n1.5\n2.0\n");
+        let contract = create_file_contract(&trusted, ParseMode::Auto, CxmlMode::Mapped)
+            .expect("trusted contract should build");
+        let report = compare_file_contracts(
+            &contract,
+            &create_file_contract(&widened, contract.parser, CxmlMode::Mapped)
+                .expect("widened fixture should parse"),
+        );
+
+        assert!(report.compatible);
+        assert_eq!(
+            contract_finding(&report, "numeric_widening")
+                .expect("numeric widening should be reported")
+                .severity,
+            ContractSeverity::Info
+        );
+        fs::remove_dir_all(dir).expect("contract test directory should be removed");
+    }
+
+    #[test]
+    fn semantic_identifiers_accept_numeric_alphanumeric_and_leading_zero_values() {
+        let dir = contract_test_dir("identifiers");
+        let numeric =
+            write_contract_test_file(&dir, "numeric.csv", "order_id,postal_code\n000123,00501\n");
+        let alpha =
+            write_contract_test_file(&dir, "alpha.csv", "order_id,postal_code\nPO-A12,SW1A 1AA\n");
+        let contract = create_file_contract(&numeric, ParseMode::Auto, CxmlMode::Mapped)
+            .expect("identifier contract should build");
+        assert!(
+            contract
+                .fields
+                .iter()
+                .all(|field| field.logical_type == ColumnType::String)
+        );
+        let report = compare_file_contracts(
+            &contract,
+            &create_file_contract(&alpha, contract.parser, CxmlMode::Mapped)
+                .expect("alphanumeric identifiers should parse"),
+        );
+        assert!(report.compatible);
+        assert!(report.findings.is_empty());
+        fs::remove_dir_all(dir).expect("contract test directory should be removed");
+    }
+
+    #[test]
+    fn contract_detects_missing_nested_json_path() {
+        let dir = contract_test_dir("json");
+        let trusted = write_contract_test_file(
+            &dir,
+            "trusted.json",
+            r#"{"customer":{"id":"001","region":"NE"},"amount":12}"#,
+        );
+        let missing = write_contract_test_file(
+            &dir,
+            "missing.json",
+            r#"{"customer":{"id":"002"},"amount":13}"#,
+        );
+        let contract = create_file_contract(&trusted, ParseMode::Json, CxmlMode::Mapped)
+            .expect("json contract should build");
+        let report = compare_file_contracts(
+            &contract,
+            &create_file_contract(&missing, contract.parser, CxmlMode::Mapped)
+                .expect("json fixture should parse"),
+        );
+        let finding = contract_finding(&report, "missing_field")
+            .expect("missing json path should be reported");
+        assert_eq!(finding.field.as_deref(), Some("customer_region"));
+        assert!(!report.compatible);
+        fs::remove_dir_all(dir).expect("contract test directory should be removed");
+    }
+
+    #[test]
+    fn contract_detects_missing_cxml_field() {
+        let dir = contract_test_dir("cxml");
+        let trusted = write_contract_test_file(
+            &dir,
+            "trusted.cxml",
+            r#"<cXML payloadID="P-1"><Request><OrderRequest><OrderRequestHeader orderID="PO-1"/><ItemOut lineNumber="1" quantity="1"><ItemID><SupplierPartID>SKU-1</SupplierPartID><SupplierPartAuxiliaryID>AUX-1</SupplierPartAuxiliaryID></ItemID></ItemOut></OrderRequest></Request></cXML>"#,
+        );
+        let missing = write_contract_test_file(
+            &dir,
+            "missing.cxml",
+            r#"<cXML payloadID="P-2"><Request><OrderRequest><OrderRequestHeader orderID="PO-2"/><ItemOut lineNumber="1" quantity="1"><ItemID><SupplierPartID>SKU-2</SupplierPartID></ItemID></ItemOut></OrderRequest></Request></cXML>"#,
+        );
+        let contract = create_file_contract(&trusted, ParseMode::Cxml, CxmlMode::Mapped)
+            .expect("cxml contract should build");
+        let report = compare_file_contracts(
+            &contract,
+            &create_file_contract(&missing, contract.parser, CxmlMode::Mapped)
+                .expect("cxml fixture should parse"),
+        );
+        let finding = contract_finding(&report, "missing_field")
+            .expect("missing cxml field should be reported");
+        assert_eq!(finding.field.as_deref(), Some("supplier_part_auxiliary_id"));
+        assert!(!report.compatible);
+        fs::remove_dir_all(dir).expect("contract test directory should be removed");
+    }
+
+    #[test]
+    fn malformed_input_cannot_be_evaluated_against_contract() {
+        let dir = contract_test_dir("malformed");
+        let malformed = write_contract_test_file(&dir, "malformed.json", "{not valid json");
+        assert!(
+            create_file_contract(&malformed, ParseMode::Json, CxmlMode::Mapped).is_err(),
+            "malformed input must produce an operational parse error"
+        );
+        fs::remove_dir_all(dir).expect("contract test directory should be removed");
+    }
+
+    #[test]
+    fn sample_contract_output_is_deterministic() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let trusted = root
+            .join("examples")
+            .join("public")
+            .join("contract")
+            .join("trusted_supplier.csv");
+        let sample = root
+            .join("examples")
+            .join("public")
+            .join("contract")
+            .join("supplier.contract.json");
+        let first = create_file_contract(&trusted, ParseMode::Auto, CxmlMode::Mapped)
+            .expect("sample contract should build");
+        let second = create_file_contract(&trusted, ParseMode::Auto, CxmlMode::Mapped)
+            .expect("sample contract should build twice");
+        assert_eq!(first, second);
+
+        let mut generated =
+            serde_json::to_string_pretty(&first).expect("sample contract should serialize");
+        generated.push('\n');
+        let checked_in = fs::read_to_string(sample).expect("sample contract should be readable");
+        assert_eq!(generated, checked_in);
     }
 }
